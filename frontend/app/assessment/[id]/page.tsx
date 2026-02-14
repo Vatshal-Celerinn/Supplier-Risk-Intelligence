@@ -2,25 +2,43 @@
 
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import jsPDF from "jspdf";
 
-import MetricCard from "@/components/ui/MetricCard";
-import RiskBadge from "@/components/ui/RiskBadge";
-import GradientSurface from "@/components/ui/GradientSurface";
+type NetworkNode = {
+  id: string;
+  risk: "PASS" | "CONDITIONAL" | "FAIL";
+};
+
+type TimelineEvent = {
+  timestamp: string;
+  label: string;
+  severity: "LOW" | "MEDIUM" | "HIGH";
+};
+
+type AuditEntry = {
+  actor: string;
+  action: string;
+  timestamp: string;
+};
 
 type AssessmentData = {
   supplier: string;
-  overall_status: string;
+  overall_status: "PASS" | "CONDITIONAL" | "FAIL";
   risk_score: number;
   sanctions: any;
   section_889: any;
   explanations: string[];
-  executive_brief?: string;
+  graph?: { nodes: NetworkNode[] };
+
+  timeline?: TimelineEvent[];
+  audit_log?: AuditEntry[];
+  risk_history?: number[];
 };
 
 export default function AssessmentPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string;
 
   const [data, setData] = useState<AssessmentData | null>(null);
@@ -28,120 +46,186 @@ export default function AssessmentPage() {
   useEffect(() => {
     axios
       .get(`http://127.0.0.1:8000/suppliers/${id}/assessment`)
-      .then(res => setData(res.data));
+      .then(res => {
+        setData(res.data);
+      });
   }, [id]);
 
   if (!data) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        Loading...
+      <div className="min-h-screen flex items-center justify-center bg-[#070b12] text-gray-500">
+        Loading assessment...
       </div>
     );
   }
 
   const exportPDF = () => {
     const pdf = new jsPDF();
-
-    pdf.setFontSize(22);
-    pdf.text("Executive Risk Report", 20, 25);
-
-    pdf.setFontSize(14);
-    pdf.text(`Supplier: ${data.supplier}`, 20, 45);
-    pdf.text(`Risk Score: ${data.risk_score}`, 20, 55);
-    pdf.text(`Status: ${data.overall_status}`, 20, 65);
-
-    pdf.setFontSize(12);
-    pdf.text("Findings:", 20, 80);
-
-    let y = 90;
-    data.explanations.forEach((line) => {
-      pdf.text(`- ${line}`, 25, y);
-      y += 8;
-    });
-
-    pdf.save("executive-risk-report.pdf");
+    pdf.setFontSize(16);
+    pdf.text("Supplier Risk Intelligence Report", 20, 25);
+    pdf.text(`Supplier: ${data.supplier}`, 20, 40);
+    pdf.text(`Risk Score: ${data.risk_score}`, 20, 50);
+    pdf.text(`Status: ${data.overall_status}`, 20, 60);
+    pdf.save("risk-report.pdf");
   };
 
+  const riskStyle = (risk: string) => {
+    if (risk === "PASS") return "border-green-500 text-green-400";
+    if (risk === "CONDITIONAL") return "border-yellow-500 text-yellow-400";
+    return "border-red-500 text-red-400";
+  };
+
+  const severityStyle = (level: string) => {
+    if (level === "LOW") return "text-green-400";
+    if (level === "MEDIUM") return "text-yellow-400";
+    return "text-red-400";
+  };
+
+  const hasTrend = data.risk_history && data.risk_history.length > 0;
+  const hasTimeline = data.timeline && data.timeline.length > 0;
+  const hasAudit = data.audit_log && data.audit_log.length > 0;
+
+  const maxRisk =
+    hasTrend && data.risk_history
+      ? Math.max(...data.risk_history)
+      : 0;
+
   return (
-    <main className="min-h-screen px-12 py-16">
+    <main className="min-h-screen px-16 py-24 bg-[#070b12] text-white">
+      <div className="max-w-6xl mx-auto space-y-16">
 
-      {/* HEADER SECTION */}
-      <div className="max-w-7xl mx-auto space-y-16">
-
-        <GradientSurface>
-          <div className="flex items-start justify-between">
-
-            {/* Left Side */}
-            <div className="space-y-4 max-w-3xl">
-              <h1 className="text-4xl font-semibold leading-tight">
-                {data.supplier}
-              </h1>
-
-              <p className="text-base text-gray-400">
-                Executive Risk Assessment Overview
-              </p>
-
-              <p className="text-gray-400 pt-4 leading-relaxed">
-                {data.executive_brief ||
-                  "No material compliance risk detected based on current screening data."}
-              </p>
-            </div>
-
-            {/* Right Side */}
-            <div className="pt-2">
-              <RiskBadge
-                status={data.overall_status}
-                score={data.risk_score}
-              />
-            </div>
-
+        {/* Header */}
+        <div className="flex justify-between items-start border-b border-zinc-800 pb-8">
+          <div>
+            <h1 className="text-4xl font-semibold tracking-tight">
+              {data.supplier}
+            </h1>
+            <p className="text-gray-500 text-sm mt-2">
+              Intelligence risk assessment dossier
+            </p>
           </div>
-        </GradientSurface>
 
-
-        {/* METRICS ROW */}
-        <div className="grid md:grid-cols-2 gap-10">
-
-          <MetricCard
-            title="Risk Score"
-            value={data.risk_score}
-          />
-
-          <MetricCard
-            title="Sanctions Risk"
-            value={
-              data.sanctions?.overall_status === "FAIL" ? 1 : 0
-            }
-          />
-
+          <div
+            className={`px-4 py-1 text-xs tracking-widest border rounded ${riskStyle(
+              data.overall_status
+            )}`}
+          >
+            {data.overall_status}
+          </div>
         </div>
 
-
-        {/* FINDINGS SECTION */}
-        <GradientSurface>
-          <div className="space-y-8">
-
-            <h2 className="text-2xl font-semibold">
-              Compliance Findings
-            </h2>
-
-            <ul className="space-y-3 text-gray-400 leading-relaxed">
-              {data.explanations.map((reason, i) => (
-                <li key={i}>• {reason}</li>
-              ))}
-            </ul>
-
+        {/* Risk Trend Indicator */}
+        <div className="border border-zinc-800 rounded-lg px-6 py-6 bg-[#0b111b]">
+          <div className="text-xs uppercase tracking-widest text-gray-500 mb-6">
+            Risk Trend
           </div>
-        </GradientSurface>
 
+          {!hasTrend ? (
+            <div className="text-sm text-gray-500">
+              None — backend did not provide historical risk data.
+            </div>
+          ) : (
+            <div className="flex items-end gap-4 h-32">
+              {data.risk_history!.map((value, index) => (
+                <div
+                  key={index}
+                  className="flex-1 bg-white/10 relative"
+                  style={{
+                    height: `${(value / maxRisk) * 100}%`,
+                  }}
+                >
+                  <div className="absolute bottom-0 left-0 right-0 h-full bg-white/20" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-        {/* EXPORT BUTTON */}
-        <div className="flex justify-end">
+        {/* Timeline */}
+        <div className="border border-zinc-800 rounded-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-zinc-800 text-xs uppercase tracking-widest text-gray-500 bg-[#0a0f18]">
+            Compliance Timeline
+          </div>
+
+          <div className="px-6 py-6 space-y-6">
+            {!hasTimeline ? (
+              <div className="text-sm text-gray-500">
+                None — backend did not provide compliance timeline data.
+              </div>
+            ) : (
+              data.timeline!.map((event, index) => (
+                <div key={index} className="flex justify-between text-sm">
+                  <div>
+                    <div className="text-gray-400">
+                      {event.timestamp}
+                    </div>
+                    <div
+                      className={`${severityStyle(
+                        event.severity
+                      )} font-medium`}
+                    >
+                      {event.label}
+                    </div>
+                  </div>
+                  <div
+                    className={`text-xs tracking-widest ${severityStyle(
+                      event.severity
+                    )}`}
+                  >
+                    {event.severity}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Audit Log */}
+        <div className="border border-zinc-800 rounded-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-zinc-800 text-xs uppercase tracking-widest text-gray-500 bg-[#0a0f18]">
+            Audit Log
+          </div>
+
+          <div className="px-6 py-6 space-y-4 text-sm text-gray-400">
+            {!hasAudit ? (
+              <div className="text-sm text-gray-500">
+                None — backend did not provide audit log data.
+              </div>
+            ) : (
+              data.audit_log!.map((entry, index) => (
+                <div
+                  key={index}
+                  className="flex justify-between border-b border-zinc-800 pb-3 last:border-none"
+                >
+                  <div>
+                    <span className="text-white">
+                      {entry.actor}
+                    </span>{" "}
+                    — {entry.action}
+                  </div>
+                  <div className="text-gray-500">
+                    {entry.timestamp}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-end gap-4">
+          <button
+            onClick={() => router.back()}
+            className="px-5 py-2 text-sm border border-zinc-700 hover:border-white transition"
+          >
+            Back
+          </button>
+
           <button
             onClick={exportPDF}
-            className="px-8 py-3 rounded-xl bg-green-700 hover:bg-green-600 transition-all"
+            className="px-5 py-2 text-sm border border-white hover:bg-white hover:text-black transition"
           >
-            Export Executive PDF
+            Export Report
           </button>
         </div>
 
