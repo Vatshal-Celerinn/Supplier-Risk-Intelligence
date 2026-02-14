@@ -80,5 +80,5 @@ class AuditLog(Base):
     action = Column(String, nullable=False)
     resource_type = Column(String, nullable=False)
     resource_id = Column(Integer, nullable=True)
-    metadata = Column(JSON, nullable=True)
+    details = Column(JSON, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)

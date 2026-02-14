@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import health, supplier, auth
+from app.routes import health, supplier, auth, audit
 from app.database import engine, SessionLocal
 from app import models
 from app.services.sanctions_loader import load_sanctions
 from app.services.covered_loader import load_covered_entities
+
+
 
 # Create DB tables
 
@@ -23,6 +25,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(health.router)
 app.include_router(supplier.router)
+app.include_router(audit.router)
 
 
 @app.get("/")

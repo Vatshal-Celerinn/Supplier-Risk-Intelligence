@@ -44,7 +44,7 @@ def require_admin(current_user: User = Depends(get_current_user)):
 def register(
     user_data: UserCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    
 ):
     existing = db.query(User).filter(User.username == user_data.username).first()
     if existing:

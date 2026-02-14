@@ -1,21 +1,38 @@
 from fastapi import APIRouter, Depends, WebSocket
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Supplier, AssessmentHistory
+from app.models import Supplier, AssessmentHistory, User
 from app.schemas import SupplierCreate, SupplierResponse
 from typing import List
 from app.services.assessment_service import run_assessment
+from app.services.audit_service import log_action
+from app.routes.auth import get_current_user
 import asyncio
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 
 
 @router.post("/", response_model=SupplierResponse)
-def create_supplier(supplier: SupplierCreate, db: Session = Depends(get_db)):
+def create_supplier(
+    supplier: SupplierCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     db_supplier = Supplier(**supplier.model_dump())
     db.add(db_supplier)
     db.commit()
     db.refresh(db_supplier)
+
+    # Audit log
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="CREATE_SUPPLIER",
+        resource_type="Supplier",
+        resource_id=db_supplier.id,
+        details={"name": db_supplier.name},
+    )
+
     return db_supplier
 
 
@@ -24,7 +41,6 @@ def list_suppliers(db: Session = Depends(get_db)):
     return db.query(Supplier).all()
 
 
-# ✅ NEW OPTIMIZED ENDPOINT
 @router.get("/with-status")
 def list_suppliers_with_status(db: Session = Depends(get_db)):
     suppliers = db.query(Supplier).all()
@@ -50,20 +66,57 @@ def list_suppliers_with_status(db: Session = Depends(get_db)):
 
 
 @router.get("/{supplier_id}/assessment")
-def supplier_assessment(supplier_id: int, db: Session = Depends(get_db)):
-    return run_assessment(supplier_id, db)
+def supplier_assessment(
+    supplier_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = run_assessment(supplier_id, db)
+
+    # Audit log
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="RUN_ASSESSMENT",
+        resource_type="Supplier",
+        resource_id=supplier_id,
+        details={"result": result.get("overall_status")},
+    )
+
+    return result
 
 
 @router.post("/compare")
-def compare_suppliers(supplier_ids: List[int], db: Session = Depends(get_db)):
+def compare_suppliers(
+    supplier_ids: List[int],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     results = []
+
     for sid in supplier_ids:
-        results.append(run_assessment(sid, db))
+        result = run_assessment(sid, db)
+
+        log_action(
+            db=db,
+            user_id=current_user.id,
+            action="RUN_ASSESSMENT_COMPARE",
+            resource_type="Supplier",
+            resource_id=sid,
+            details={"result": result.get("overall_status")},
+        )
+
+        results.append(result)
+
     return results
 
 
 @router.get("/{supplier_id}/history")
-def supplier_history(supplier_id: int, db: Session = Depends(get_db)):
+def supplier_history(
+    supplier_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     return (
         db.query(AssessmentHistory)
         .filter(AssessmentHistory.supplier_id == supplier_id)
