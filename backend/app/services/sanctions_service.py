@@ -3,6 +3,13 @@ from rapidfuzz import fuzz
 from app.models import Supplier, SanctionedEntity
 
 
+MATCH_THRESHOLD = 85
+
+
+def normalize(text: str):
+    return text.lower().replace(",", "").replace(".", "").strip()
+
+
 def check_sanctions(supplier_id: int, db: Session):
     supplier = db.query(Supplier).filter_by(id=supplier_id).first()
 
@@ -12,37 +19,38 @@ def check_sanctions(supplier_id: int, db: Session):
     matches = []
     sanctions = db.query(SanctionedEntity).all()
 
+    supplier_name = normalize(supplier.name)
+
     highest_score = 0
 
     for entity in sanctions:
-        score = max(
-            fuzz.token_set_ratio(supplier.name.lower(), entity.name.lower()),
-            fuzz.partial_ratio(supplier.name.lower(), entity.name.lower())
+        score = fuzz.token_set_ratio(
+            supplier_name,
+            normalize(entity.name)
         )
 
-        if score > 75:
+        if score >= MATCH_THRESHOLD:
             matches.append({
                 "sanctioned_name": entity.name,
                 "source": entity.source,
                 "match_score": score
             })
 
-            if score > highest_score:
-                highest_score = score
+            highest_score = max(highest_score, score)
 
     if matches:
         return {
             "supplier": supplier.name,
             "overall_status": "FAIL",
             "risk_score": 100,
-            "reason": "Supplier matched sanctions list",
+            "reason": "High confidence sanctions match",
             "matches": matches
         }
 
     return {
         "supplier": supplier.name,
         "overall_status": "PASS",
-        "risk_score": 10,
+        "risk_score": 0,
         "reason": "No sanctions match found",
         "matches": []
     }

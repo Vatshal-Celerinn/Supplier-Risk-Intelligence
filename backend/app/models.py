@@ -1,6 +1,17 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    role = Column(String, default="viewer")  # viewer | admin
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Supplier(Base):
@@ -10,6 +21,12 @@ class Supplier(Base):
     name = Column(String, index=True, nullable=False)
     country = Column(String, nullable=True)
     industry = Column(String, nullable=True)
+
+    assessments = relationship(
+        "AssessmentHistory",
+        back_populates="supplier",
+        cascade="all, delete-orphan"
+    )
 
 
 class SanctionedEntity(Base):
@@ -31,7 +48,24 @@ class AssessmentHistory(Base):
     __tablename__ = "assessment_history"
 
     id = Column(Integer, primary_key=True)
-    supplier_id = Column(Integer, index=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"))
     risk_score = Column(Integer)
     overall_status = Column(String)
+    scoring_version = Column(String, default="v1")
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    supplier = relationship(
+        "Supplier",
+        back_populates="assessments"
+    )
+
+
+class ScoringConfig(Base):
+    __tablename__ = "scoring_config"
+
+    id = Column(Integer, primary_key=True)
+    sanctions_weight = Column(Integer, default=70)
+    section889_fail_weight = Column(Integer, default=30)
+    section889_conditional_weight = Column(Integer, default=15)
+    version = Column(String, default="v1")
+    active = Column(Boolean, default=True)

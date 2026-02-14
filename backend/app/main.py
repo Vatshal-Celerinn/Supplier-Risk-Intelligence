@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import health, supplier
+from app.routes import health, supplier, auth
 from app.database import engine, SessionLocal
 from app import models
 from app.services.sanctions_loader import load_sanctions
 from app.services.covered_loader import load_covered_entities
 
+# Create DB tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Supplier Risk Intelligence Platform")
@@ -18,6 +19,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Routers
+app.include_router(auth.router)
 app.include_router(health.router)
 app.include_router(supplier.router)
 
@@ -30,6 +33,25 @@ def root():
 @app.on_event("startup")
 def startup_event():
     db = SessionLocal()
+
+    # Load static data
     load_sanctions(db, "data/sanctions.csv")
     load_covered_entities(db, "data/covered_entities.csv")
+
+    # Ensure at least one active scoring config exists
+    existing_config = db.query(models.ScoringConfig).filter(
+        models.ScoringConfig.active == True
+    ).first()
+
+    if not existing_config:
+        default_config = models.ScoringConfig(
+            sanctions_weight=70,
+            section889_fail_weight=30,
+            section889_conditional_weight=15,
+            version="v1",
+            active=True,
+        )
+        db.add(default_config)
+        db.commit()
+
     db.close()
