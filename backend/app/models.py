@@ -220,3 +220,43 @@ class IngestionRun(Base):
 
     started_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+
+
+# =====================================================
+# TRUST MODEL CONFIG (VERSIONED)
+# =====================================================
+
+class TrustModelConfig(Base):
+    __tablename__ = "trust_model_config"
+
+    id = Column(Integer, primary_key=True)
+
+    model_name = Column(String, nullable=False)  # e.g. "OFAC_MODE", "DEFENSE_MODE"
+    version = Column(String, nullable=False)
+
+    relationship_weights = Column(JSON, nullable=False)
+    sanction_boost = Column(Float, default=1.5)
+    depth_limit = Column(Integer, default=4)
+    decay_factor = Column(Float, default=1.0)
+
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# =====================================================
+# TRUST SCORE HISTORY
+# =====================================================
+
+class TrustScoreHistory(Base):
+    __tablename__ = "trust_score_history"
+
+    id = Column(Integer, primary_key=True)
+
+    entity_id = Column(Integer, ForeignKey("global_entities.id"))
+    model_version = Column(String)
+    scenario = Column(String)
+
+    score = Column(Float)
+    breakdown = Column(JSON)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
