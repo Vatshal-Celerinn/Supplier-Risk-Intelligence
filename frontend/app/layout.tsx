@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import Navbar from "@/components/Navbar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,18 +31,13 @@ export default function RootLayout({
       >
         <AuthProvider>
           <div className="min-h-screen flex flex-col">
-            <header className="border-b border-[var(--border-subtle)] px-10 py-5 backdrop-blur-md bg-black/40">
-              <div className="max-w-7xl mx-auto flex justify-between items-center">
-                <h1 className="text-lg font-semibold tracking-tight">
-                  Vendor Risk Intelligence
-                </h1>
-                <span className="text-sm text-[var(--text-muted)]">
-                  Enterprise Edition
-                </span>
-              </div>
-            </header>
+            {/* Global Navigation */}
+            <Navbar />
 
-            <div className="flex-1">{children}</div>
+            {/* Page Content */}
+            <main className="flex-1">
+              {children}
+            </main>
           </div>
         </AuthProvider>
       </body>
