@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { useEffect, useState, useMemo } from "react";
+import api from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import jsPDF from "jspdf";
 
@@ -30,7 +30,6 @@ type AssessmentData = {
   section_889: any;
   explanations: string[];
   graph?: { nodes: NetworkNode[] };
-
   timeline?: TimelineEvent[];
   audit_log?: AuditEntry[];
   risk_history?: number[];
@@ -42,31 +41,29 @@ export default function AssessmentPage() {
   const id = params?.id as string;
 
   const [data, setData] = useState<AssessmentData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axios
-      .get(`http://127.0.0.1:8000/suppliers/${id}/assessment`)
-      .then(res => {
-        setData(res.data);
-      });
+    if (!id) return;
+
+    api
+      .get(`/suppliers/${id}/assessment`)
+      .then(res => setData(res.data))
+      .finally(() => setLoading(false));
   }, [id]);
 
-  if (!data) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#070b12] text-gray-500">
-        Loading assessment...
-      </div>
-    );
-  }
-
   const exportPDF = () => {
+    if (!data) return;
+
     const pdf = new jsPDF();
-    pdf.setFontSize(16);
+    pdf.setFontSize(18);
     pdf.text("Supplier Risk Intelligence Report", 20, 25);
+    pdf.setFontSize(12);
     pdf.text(`Supplier: ${data.supplier}`, 20, 40);
     pdf.text(`Risk Score: ${data.risk_score}`, 20, 50);
     pdf.text(`Status: ${data.overall_status}`, 20, 60);
-    pdf.save("risk-report.pdf");
+
+    pdf.save(`${data.supplier}-risk-report.pdf`);
   };
 
   const riskStyle = (risk: string) => {
@@ -81,18 +78,34 @@ export default function AssessmentPage() {
     return "text-red-400";
   };
 
-  const hasTrend = data.risk_history && data.risk_history.length > 0;
-  const hasTimeline = data.timeline && data.timeline.length > 0;
-  const hasAudit = data.audit_log && data.audit_log.length > 0;
+  const hasTrend = !!data?.risk_history?.length;
+  const hasTimeline = !!data?.timeline?.length;
+  const hasAudit = !!data?.audit_log?.length;
 
-  const maxRisk =
-    hasTrend && data.risk_history
-      ? Math.max(...data.risk_history)
-      : 0;
+  const maxRisk = useMemo(() => {
+    if (!hasTrend) return 0;
+    return Math.max(...(data!.risk_history || []));
+  }, [data, hasTrend]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#070b12] text-gray-500">
+        Loading assessment...
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#070b12] text-red-500">
+        Failed to load assessment.
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen px-16 py-24 bg-[#070b12] text-white">
-      <div className="max-w-6xl mx-auto space-y-16">
+      <div className="max-w-7xl mx-auto space-y-16">
 
         {/* Header */}
         <div className="flex justify-between items-start border-b border-zinc-800 pb-8">
@@ -114,7 +127,19 @@ export default function AssessmentPage() {
           </div>
         </div>
 
-        {/* Risk Trend Indicator */}
+        {/* Risk Score Card */}
+        <div className="border border-zinc-800 rounded-lg p-8 bg-[#0b111b] flex justify-between items-center">
+          <div>
+            <div className="text-xs uppercase tracking-widest text-gray-500">
+              Overall Risk Score
+            </div>
+            <div className="text-5xl font-semibold mt-3">
+              {data.risk_score}
+            </div>
+          </div>
+        </div>
+
+        {/* Risk Trend */}
         <div className="border border-zinc-800 rounded-lg px-6 py-6 bg-[#0b111b]">
           <div className="text-xs uppercase tracking-widest text-gray-500 mb-6">
             Risk Trend
@@ -129,12 +154,12 @@ export default function AssessmentPage() {
               {data.risk_history!.map((value, index) => (
                 <div
                   key={index}
-                  className="flex-1 bg-white/10 relative"
+                  className="flex-1 bg-white/10 relative rounded-sm"
                   style={{
                     height: `${(value / maxRisk) * 100}%`,
                   }}
                 >
-                  <div className="absolute bottom-0 left-0 right-0 h-full bg-white/20" />
+                  <div className="absolute bottom-0 left-0 right-0 h-full bg-white/20 rounded-sm" />
                 </div>
               ))}
             </div>
@@ -228,7 +253,6 @@ export default function AssessmentPage() {
             Export Report
           </button>
         </div>
-
       </div>
     </main>
   );

@@ -1,10 +1,12 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
+import axios, {
+  AxiosError,
+  InternalAxiosRequestConfig,
+} from "axios";
 
 const api = axios.create({
   baseURL: "http://127.0.0.1:8000",
-  withCredentials: true, // REQUIRED for HTTP-only cookies
+  withCredentials: true,
 });
-
 
 let isRefreshing = false;
 let failedQueue: {
@@ -14,22 +16,19 @@ let failedQueue: {
 
 const processQueue = (error: any) => {
   failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(true);
-    }
+    if (error) prom.reject(error);
+    else prom.resolve(true);
   });
   failedQueue = [];
 };
 
 api.interceptors.response.use(
   (response) => response,
-
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & {
-      _retry?: boolean;
-    };
+    const originalRequest =
+      error.config as InternalAxiosRequestConfig & {
+        _retry?: boolean;
+      };
 
     if (
       error.response?.status === 401 &&
@@ -48,7 +47,6 @@ api.interceptors.response.use(
 
       try {
         await api.post("/auth/refresh");
-
         processQueue(null);
         return api(originalRequest);
       } catch (refreshError) {
@@ -63,5 +61,32 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+/* ========= API HELPERS ========= */
+
+export const supplierAPI = {
+  create: (payload: any) =>
+    api.post("/suppliers", payload),
+
+  listWithStatus: () =>
+    api.get("/suppliers/with-status"),
+
+  assessment: (id: string) =>
+    api.get(`/suppliers/${id}/assessment`),
+
+  resolveIdentity: (name: string) =>
+    api.post("/suppliers/resolve", { name }),
+};
+
+export const intelligenceAPI = {
+  aggregatePublicData: (id: string) =>
+    api.get(`/suppliers/${id}/public-data`),
+
+  extractEntities: (id: string, text: string) =>
+    api.post(`/suppliers/${id}/extract`, { text }),
+
+  trustGraph: (id: string) =>
+    api.get(`/suppliers/${id}/graph`),
+};
 
 export default api;

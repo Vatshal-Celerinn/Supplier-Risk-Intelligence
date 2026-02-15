@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import api from "@/lib/api";
 import { useRouter } from "next/navigation";
 
 type Supplier = {
@@ -21,10 +21,9 @@ export default function SuppliersPage() {
 
   const router = useRouter();
 
-  // ✅ SINGLE OPTIMIZED API CALL
   useEffect(() => {
-    axios
-      .get("http://127.0.0.1:8000/suppliers/with-status")
+    api
+      .get("/suppliers/with-status")
       .then(res => setSuppliers(res.data));
   }, []);
 
@@ -65,7 +64,7 @@ export default function SuppliersPage() {
 
   return (
     <main className="min-h-screen px-16 py-24 bg-[#070b12] text-white">
-      <div className="max-w-6xl mx-auto space-y-12">
+      <div className="max-w-7xl mx-auto space-y-12">
 
         <div className="space-y-3">
           <h1 className="text-4xl font-semibold tracking-tight">
@@ -162,7 +161,6 @@ export default function SuppliersPage() {
               </div>
             );
           })}
-
         </div>
 
         {selected.length > 1 && (
@@ -175,7 +173,6 @@ export default function SuppliersPage() {
             </button>
           </div>
         )}
-
       </div>
     </main>
   );
