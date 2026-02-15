@@ -1,21 +1,23 @@
-from fastapi import APIRouter, Depends, WebSocket
+from fastapi import APIRouter, Depends, WebSocket, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 import asyncio
 from sqlalchemy import desc
+
 from app.database import get_db, SessionLocal
 from app.models import Supplier, AssessmentHistory, User
 from app.schemas import SupplierCreate, SupplierResponse
 from app.services.assessment_service import run_assessment
 from app.services.audit_service import log_action
 from app.core.security import get_current_user
+from app.graph.supplier_graph_service import create_supplier_node
 
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 
 
 # =====================================================
-# CREATE SUPPLIER (TENANT SAFE)
+# CREATE SUPPLIER (TENANT SAFE + GRAPH AUTO-CREATE)
 # =====================================================
 @router.post("/", response_model=SupplierResponse)
 def create_supplier(
@@ -51,8 +53,23 @@ def create_supplier(
     db.commit()
     db.refresh(db_supplier)
 
+    # -------------------------------------------------
+    # ENTITY RESOLUTION (SQL side)
+    # -------------------------------------------------
     resolve_supplier_entity(db_supplier, db)
 
+    # -------------------------------------------------
+    # GRAPH NODE CREATION (Neo4j side)
+    # -------------------------------------------------
+    try:
+        create_supplier_node(db_supplier.name)
+    except Exception as e:
+        # Do NOT break supplier creation if graph fails
+        print(f"⚠️ Graph node creation failed: {e}")
+
+    # -------------------------------------------------
+    # AUDIT LOG
+    # -------------------------------------------------
     log_action(
         db=db,
         user_id=current_user.id,
@@ -63,7 +80,6 @@ def create_supplier(
     )
 
     return db_supplier
-
 
 
 # =====================================================
@@ -100,7 +116,7 @@ def supplier_assessment(
     )
 
     if not supplier:
-        raise Exception("Supplier not found")
+        raise HTTPException(status_code=404, detail="Supplier not found")
 
     result = run_assessment(supplier_id, db)
 
@@ -138,7 +154,7 @@ def supplier_history(
 
 
 # =====================================================
-# STREAM
+# LIVE STREAM ASSESSMENT
 # =====================================================
 @router.websocket("/stream/{supplier_id}")
 async def stream_supplier(websocket: WebSocket, supplier_id: int):
@@ -148,13 +164,24 @@ async def stream_supplier(websocket: WebSocket, supplier_id: int):
         db = SessionLocal()
         result = run_assessment(supplier_id, db)
         db.close()
+
         await websocket.send_json(result)
         await asyncio.sleep(5)
 
 
+# =====================================================
+# LIST SUPPLIERS WITH LATEST STATUS
+# =====================================================
 @router.get("/with-status")
-def list_suppliers_with_status(db: Session = Depends(get_db)):
-    suppliers = db.query(Supplier).all()
+def list_suppliers_with_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    suppliers = (
+        db.query(Supplier)
+        .filter(Supplier.organization_id == current_user.organization_id)
+        .all()
+    )
 
     results = []
 
@@ -178,11 +205,13 @@ def list_suppliers_with_status(db: Session = Depends(get_db)):
     return results
 
 
+# =====================================================
+# IDENTITY RESOLUTION (Placeholder)
+# =====================================================
 @router.post("/resolve")
 def resolve_supplier_identity(payload: dict):
     name = payload.get("name")
 
-    # placeholder logic
     return {
         "matches": [
             {
