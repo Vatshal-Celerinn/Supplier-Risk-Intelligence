@@ -1,40 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-export default function LoginPage() {
-  const { login, user } = useAuth();
+export default function SignupPage() {
+  const { register } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const redirect = searchParams.get("redirect") || "/suppliers";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (user) {
-      router.push(redirect);
-    }
-  }, [user, router, redirect]);
-
-  const handleLogin = async () => {
+  const handleSignup = async () => {
     try {
       setError("");
-      await login(username, password);
+      await register(username, password);
+      router.push("/suppliers");
     } catch {
-      setError("Invalid credentials");
+      setError("Signup failed");
     }
   };
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-[#070b12] text-white">
       <div className="w-96 space-y-6">
-        <h1 className="text-2xl font-semibold">Login</h1>
+        <h1 className="text-2xl font-semibold">Sign Up</h1>
 
         {error && (
           <div className="text-red-500 text-sm">{error}</div>
@@ -54,19 +46,19 @@ export default function LoginPage() {
         />
 
         <button
-          onClick={handleLogin}
+          onClick={handleSignup}
           className="w-full px-4 py-2 border border-white hover:bg-white hover:text-black transition"
         >
-          Login
+          Create Account
         </button>
 
         <div className="text-sm text-[var(--text-muted)]">
-          Don’t have an account?{" "}
+          Already have an account?{" "}
           <Link
-            href="/signup"
+            href="/login"
             className="text-blue-500 hover:underline"
           >
-            Sign Up
+            Login
           </Link>
         </div>
       </div>

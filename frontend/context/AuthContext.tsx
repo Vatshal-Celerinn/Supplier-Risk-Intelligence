@@ -1,6 +1,11 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import api from "@/lib/api";
 
 type User = {
@@ -13,17 +18,23 @@ type AuthContextType = {
   user: User | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  showToast: (message: string) => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
 
-  // Fetch logged-in user using cookie
   const fetchUser = async () => {
     try {
       const res = await api.get("/auth/me");
@@ -35,7 +46,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Attempt refresh if access token expired
   const refreshSession = async () => {
     try {
       await api.post("/auth/refresh");
@@ -52,6 +62,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (username: string, password: string) => {
     await api.post("/auth/login", { username, password });
     await fetchUser();
+    showToast("Successfully Logged In");
+  };
+
+  const register = async (username: string, password: string) => {
+    await api.post("/auth/register", {
+      username,
+      password,
+    });
+    await login(username, password);
   };
 
   const logout = async () => {
@@ -63,16 +82,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const showToast = (message: string) => {
+    setToast(message);
+    setTimeout(() => {
+      setToast(null);
+    }, 3000);
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         loading,
         login,
+        register,
         logout,
         refreshSession,
+        showToast,
       }}
     >
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="border border-green-500 text-green-500 px-6 py-3 rounded-md bg-transparent backdrop-blur-sm">
+            {toast}
+          </div>
+        </div>
+      )}
       {children}
     </AuthContext.Provider>
   );

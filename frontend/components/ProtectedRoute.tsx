@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 export default function ProtectedRoute({
@@ -13,15 +13,17 @@ export default function ProtectedRoute({
 }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading) {
-      if (!user) router.push("/login");
-      if (requireAdmin && user?.role !== "ADMIN") {
+      if (!user) {
+        router.push(`/login?redirect=${pathname}`);
+      } else if (requireAdmin && user.role !== "ADMIN") {
         router.push("/");
       }
     }
-  }, [user, loading, requireAdmin, router]);
+  }, [user, loading, requireAdmin, router, pathname]);
 
   if (loading || !user) return null;
 
