@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, WebSocket, HTTPException
+from fastapi import APIRouter, Depends, WebSocket, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 import asyncio
@@ -11,7 +11,6 @@ from app.services.assessment_service import run_assessment
 from app.services.audit_service import log_action
 from app.core.security import get_current_user
 from app.graph.supplier_graph_service import create_supplier_node
-
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 
@@ -26,6 +25,12 @@ def create_supplier(
     current_user: User = Depends(get_current_user),
 ):
     from app.services.entity_resolution_service import normalize, resolve_supplier_entity
+
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
 
     normalized = normalize(supplier.name)
 
@@ -53,23 +58,22 @@ def create_supplier(
     db.commit()
     db.refresh(db_supplier)
 
-    # -------------------------------------------------
-    # ENTITY RESOLUTION (SQL side)
-    # -------------------------------------------------
+    # -----------------------------
+    # ENTITY RESOLUTION (SQL)
+    # -----------------------------
     resolve_supplier_entity(db_supplier, db)
 
-    # -------------------------------------------------
-    # GRAPH NODE CREATION (Neo4j side)
-    # -------------------------------------------------
+    # -----------------------------
+    # GRAPH NODE (Neo4j)
+    # -----------------------------
     try:
         create_supplier_node(db_supplier.name)
     except Exception as e:
-        # Do NOT break supplier creation if graph fails
         print(f"⚠️ Graph node creation failed: {e}")
 
-    # -------------------------------------------------
+    # -----------------------------
     # AUDIT LOG
-    # -------------------------------------------------
+    # -----------------------------
     log_action(
         db=db,
         user_id=current_user.id,
@@ -90,11 +94,16 @@ def list_suppliers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return (
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    suppliers = (
         db.query(Supplier)
         .filter(Supplier.organization_id == current_user.organization_id)
         .all()
     )
+
+    return suppliers
 
 
 # =====================================================
@@ -106,6 +115,9 @@ def supplier_assessment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     supplier = (
         db.query(Supplier)
         .filter(
@@ -141,7 +153,10 @@ def supplier_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return (
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    history = (
         db.query(AssessmentHistory)
         .join(Supplier)
         .filter(
@@ -152,9 +167,11 @@ def supplier_history(
         .all()
     )
 
+    return history
+
 
 # =====================================================
-# LIVE STREAM ASSESSMENT
+# LIVE STREAM ASSESSMENT (No Auth Enforcement Here)
 # =====================================================
 @router.websocket("/stream/{supplier_id}")
 async def stream_supplier(websocket: WebSocket, supplier_id: int):
@@ -177,6 +194,9 @@ def list_suppliers_with_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     suppliers = (
         db.query(Supplier)
         .filter(Supplier.organization_id == current_user.organization_id)
