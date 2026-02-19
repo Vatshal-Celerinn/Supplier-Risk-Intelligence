@@ -66,13 +66,23 @@ export default function SuppliersPage() {
     <main className="min-h-screen px-16 py-24 bg-[#070b12] text-white">
       <div className="max-w-7xl mx-auto space-y-12">
 
-        <div className="space-y-3">
-          <h1 className="text-4xl font-semibold tracking-tight">
-            Suppliers
-          </h1>
-          <p className="text-gray-500 text-sm">
-            Risk monitoring and assessment control panel.
-          </p>
+        {/* Header Section with Button */}
+        <div className="flex justify-between items-start">
+          <div className="space-y-3">
+            <h1 className="text-4xl font-semibold tracking-tight">
+              Suppliers
+            </h1>
+            <p className="text-gray-500 text-sm">
+              Risk monitoring and assessment control panel.
+            </p>
+          </div>
+
+          <button
+            onClick={() => router.push("/suppliers/new")}
+            className="px-6 py-3 rounded-xl border border-zinc-700 hover:border-white transition"
+          >
+            Register New Supplier
+          </button>
         </div>
 
         <div className="border border-zinc-800 bg-[#0c121c] rounded-lg px-6 py-4">

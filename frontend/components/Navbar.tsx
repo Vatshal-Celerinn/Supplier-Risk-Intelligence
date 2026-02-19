@@ -1,12 +1,49 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { useEffect, useRef, useState } from "react";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
+
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // ===============================
+  // Detect scroll to enhance visibility
+  // ===============================
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 10);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    handleScroll();
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // ===============================
+  // Close dropdown on outside click
+  // ===============================
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const navItem = (href: string, label: string) => {
     const active = pathname === href;
@@ -26,16 +63,27 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="border-b border-[var(--border-subtle)] backdrop-blur-md bg-black/60 px-10 py-4">
-      <div className="max-w-7xl mx-auto flex justify-between items-center">
-        
+    <nav
+      className={`
+        fixed top-0 left-0 w-full z-50
+        transition-all duration-300
+        ${
+          scrolled
+            ? "bg-black/80 backdrop-blur-md border-b border-[var(--border-subtle)] opacity-100"
+            : "bg-black/40 backdrop-blur-sm opacity-80"
+        }
+        hover:opacity-100 hover:bg-black/80
+      `}
+    >
+      <div className="max-w-7xl mx-auto flex justify-between items-center px-10 py-4">
+
         {/* Left Section */}
         <div className="flex items-center gap-8">
           <Link
             href="/"
             className="text-lg font-semibold tracking-tight"
           >
-            Vendor Risk Intelligence
+            Supplier Risk Intelligence
           </Link>
 
           {user && (
@@ -51,20 +99,41 @@ export default function Navbar() {
         </div>
 
         {/* Right Section */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 relative">
           {user ? (
-            <>
-              <div className="text-sm text-[var(--text-muted)]">
-                {user.username} ({user.role})
-              </div>
-
+            <div ref={dropdownRef} className="relative">
               <button
-                onClick={logout}
-                className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 rounded-md transition"
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="px-4 py-2 text-sm bg-white/10 hover:bg-white/20 rounded-md transition flex items-center gap-2"
               >
-                Logout
+                {user.username}
+                <span className="text-xs opacity-70">▼</span>
               </button>
-            </>
+
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-44 bg-[#0f172a] border border-[var(--border-subtle)] rounded-md shadow-lg overflow-hidden">
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      router.push("/profile");
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-white/5 transition"
+                  >
+                    View Profile
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      setDropdownOpen(false);
+                      await logout();
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
             <>
               <Link
