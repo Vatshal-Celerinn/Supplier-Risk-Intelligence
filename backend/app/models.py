@@ -84,7 +84,7 @@ class GlobalEntityAlias(Base):
 class Supplier(Base):
     __tablename__ = "suppliers"
     __table_args__ = (
-        UniqueConstraint("organization_id", "normalized_name", name="uq_supplier_org_normalized"),
+        UniqueConstraint("organization_id", "normalized_name","country", name="uq_supplier_org_normalized"),
     )
 
     id = Column(Integer, primary_key=True, index=True)

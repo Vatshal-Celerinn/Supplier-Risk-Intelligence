@@ -1,22 +1,31 @@
-from fastapi import APIRouter, Depends, WebSocket, HTTPException, status
+from fastapi import APIRouter, Depends, WebSocket, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 import asyncio
 from sqlalchemy import desc
+from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db, SessionLocal
-from app.models import Supplier, AssessmentHistory, User
+from app.models import (
+    Supplier,
+    AssessmentHistory,
+    User,
+    SupplierEntityLink,
+    GlobalEntity,
+    SanctionedEntity,
+)
 from app.schemas import SupplierCreate, SupplierResponse
 from app.services.assessment_service import run_assessment
 from app.services.audit_service import log_action
 from app.core.security import get_current_user
 from app.graph.supplier_graph_service import create_supplier_node
+from app.graph.graph_client import get_session
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 
 
 # =====================================================
-# CREATE SUPPLIER (TENANT SAFE + GRAPH AUTO-CREATE)
+# CREATE SUPPLIER
 # =====================================================
 @router.post("/", response_model=SupplierResponse)
 def create_supplier(
@@ -28,17 +37,22 @@ def create_supplier(
 
     normalized = normalize(supplier.name)
 
+    # ✅ Duplicate check now includes country
     existing = (
         db.query(Supplier)
         .filter(
             Supplier.organization_id == current_user.organization_id,
             Supplier.normalized_name == normalized,
+            Supplier.country == supplier.country,
         )
         .first()
     )
 
     if existing:
-        return existing
+        raise HTTPException(
+            status_code=409,
+            detail="Supplier with same name and country already exists."
+        )
 
     db_supplier = Supplier(
         name=supplier.name,
@@ -48,26 +62,27 @@ def create_supplier(
         organization_id=current_user.organization_id,
     )
 
-    db.add(db_supplier)
-    db.commit()
-    db.refresh(db_supplier)
+    try:
+        db.add(db_supplier)
+        db.commit()
+        db.refresh(db_supplier)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Duplicate supplier detected at database level."
+        )
 
-    # -----------------------------
-    # ENTITY RESOLUTION (SQL)
-    # -----------------------------
+    # Entity Resolution
     resolve_supplier_entity(db_supplier, db)
 
-    # -----------------------------
-    # GRAPH NODE (Neo4j)
-    # -----------------------------
+    # Neo4j Graph Node
     try:
         create_supplier_node(db_supplier.name)
     except Exception as e:
         print(f"⚠️ Graph node creation failed: {e}")
 
-    # -----------------------------
-    # AUDIT LOG
-    # -----------------------------
+    # Audit Log
     log_action(
         db=db,
         user_id=current_user.id,
@@ -81,7 +96,7 @@ def create_supplier(
 
 
 # =====================================================
-# LIST SUPPLIERS (TENANT SAFE)
+# LIST SUPPLIERS (BASIC)
 # =====================================================
 @router.get("/", response_model=List[SupplierResponse])
 def list_suppliers(
@@ -97,7 +112,6 @@ def list_suppliers(
 
 # =====================================================
 # LIST SUPPLIERS WITH LATEST STATUS
-# (STATIC ROUTE FIRST — IMPORTANT)
 # =====================================================
 @router.get("/with-status")
 def list_suppliers_with_status(
@@ -133,25 +147,162 @@ def list_suppliers_with_status(
 
 
 # =====================================================
-# IDENTITY RESOLUTION (STATIC ROUTE FIRST — IMPORTANT)
+# IDENTITY RESOLUTION (TENANT SAFE)
 # =====================================================
 @router.post("/resolve")
-def resolve_supplier_identity(payload: dict):
-    name = payload.get("name")
+def resolve_supplier_identity(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    name = payload.get("name", "").strip()
+
+    if len(name) < 3:
+        return {"matches": []}
+
+    # 🔒 Only search within same organization
+    existing_suppliers = (
+        db.query(Supplier)
+        .filter(Supplier.organization_id == current_user.organization_id)
+        .all()
+    )
+
+    matches = []
+
+    for supplier in existing_suppliers:
+        if name.lower() in supplier.name.lower():
+            matches.append({
+                "canonical_name": supplier.name,
+                "confidence": 85,
+                "country": supplier.country,
+            })
+
+    return {"matches": matches}
+
+
+# =====================================================
+# SUPPLIER PROFILE (AGGREGATED VIEW)
+# =====================================================
+@router.get("/{supplier_id:int}")
+def get_supplier_profile(
+    supplier_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+
+    supplier = (
+        db.query(Supplier)
+        .filter(
+            Supplier.id == supplier_id,
+            Supplier.organization_id == current_user.organization_id,
+        )
+        .first()
+    )
+
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+
+    latest_assessment = (
+        db.query(AssessmentHistory)
+        .filter(AssessmentHistory.supplier_id == supplier.id)
+        .order_by(desc(AssessmentHistory.created_at))
+        .first()
+    )
+
+    history = (
+        db.query(AssessmentHistory)
+        .filter(AssessmentHistory.supplier_id == supplier.id)
+        .order_by(desc(AssessmentHistory.created_at))
+        .all()
+    )
+
+    linked_entities = (
+        db.query(SupplierEntityLink, GlobalEntity)
+        .join(GlobalEntity, SupplierEntityLink.entity_id == GlobalEntity.id)
+        .filter(SupplierEntityLink.supplier_id == supplier.id)
+        .all()
+    )
+
+    entity_data = []
+    sanction_hits = []
+
+    for link, entity in linked_entities:
+
+        sanctions = (
+            db.query(SanctionedEntity)
+            .filter(SanctionedEntity.entity_id == entity.id)
+            .all()
+        )
+
+        entity_info = {
+            "canonical_name": entity.canonical_name,
+            "entity_type": entity.entity_type,
+            "country": entity.country,
+            "confidence_score": link.confidence_score,
+            "sanctions": [
+                {
+                    "source": s.source,
+                    "program": s.program,
+                }
+                for s in sanctions
+            ],
+        }
+
+        if sanctions:
+            sanction_hits.append(entity.canonical_name)
+
+        entity_data.append(entity_info)
+
+    graph_summary = {"node_count": 0, "relationship_count": 0}
+
+    try:
+        with get_session() as session:
+            result = session.run(
+                """
+                MATCH (n {name: $name})-[r*1..2]-(m)
+                RETURN COUNT(DISTINCT m) as nodes,
+                       COUNT(DISTINCT r) as rels
+                """,
+                name=supplier.name,
+            ).single()
+
+            if result:
+                graph_summary["node_count"] = result["nodes"]
+                graph_summary["relationship_count"] = result["rels"]
+
+    except Exception as e:
+        print(f"Graph summary failed: {e}")
 
     return {
-        "matches": [
+        "supplier": {
+            "id": supplier.id,
+            "name": supplier.name,
+            "country": supplier.country,
+            "industry": supplier.industry,
+            "created_at": supplier.created_at,
+        },
+        "latest_assessment": {
+            "risk_score": latest_assessment.risk_score if latest_assessment else None,
+            "overall_status": latest_assessment.overall_status if latest_assessment else None,
+            "created_at": latest_assessment.created_at if latest_assessment else None,
+        },
+        "history": [
             {
-                "canonical_name": name,
-                "confidence": 0.95,
-                "country": "Unknown"
+                "id": h.id,
+                "risk_score": h.risk_score,
+                "overall_status": h.overall_status,
+                "created_at": h.created_at,
             }
-        ]
+            for h in history
+        ],
+        "linked_entities": entity_data,
+        "sanctioned_entities": sanction_hits,
+        "graph_summary": graph_summary,
     }
 
 
 # =====================================================
-# SUPPLIER ASSESSMENT (STRICT INT PATH)
+# SUPPLIER ASSESSMENT
 # =====================================================
 @router.get("/{supplier_id:int}/assessment")
 def supplier_assessment(
@@ -186,7 +337,7 @@ def supplier_assessment(
 
 
 # =====================================================
-# SUPPLIER HISTORY (STRICT INT PATH)
+# SUPPLIER HISTORY
 # =====================================================
 @router.get("/{supplier_id:int}/history")
 def supplier_history(
@@ -209,7 +360,7 @@ def supplier_history(
 
 
 # =====================================================
-# LIVE STREAM ASSESSMENT
+# LIVE STREAM
 # =====================================================
 @router.websocket("/stream/{supplier_id}")
 async def stream_supplier(websocket: WebSocket, supplier_id: int):
