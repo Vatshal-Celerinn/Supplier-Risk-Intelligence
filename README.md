@@ -159,6 +159,3 @@ Risk is calculated based on:
 
 Neo4j is used for multi-hop relationship analysis.
 
-------------------------------------------------------------------------
-
-
