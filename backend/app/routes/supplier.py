@@ -4,7 +4,7 @@ from typing import List, Optional
 import asyncio
 from sqlalchemy import desc, func, text, case
 from sqlalchemy.exc import IntegrityError
-
+from app.services.supplier_comparison_service import compare_suppliers
 from app.database import get_db, SessionLocal
 from app.models import (
     Supplier,
@@ -429,3 +429,23 @@ async def stream_supplier(websocket: WebSocket, supplier_id: int):
 
         await websocket.send_json(result)
         await asyncio.sleep(5)
+
+
+# =====================================================
+# SUPPLIER COMPARISON
+# =====================================================
+@router.get("/compare")
+def compare_two_suppliers(
+    supplier_a: int,
+    supplier_b: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = compare_suppliers(
+        supplier_a_id=supplier_a,
+        supplier_b_id=supplier_b,
+        db=db,
+        organization_id=current_user.organization_id,
+    )
+
+    return result

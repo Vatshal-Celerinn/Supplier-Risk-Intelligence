@@ -168,10 +168,72 @@ def compare_suppliers(
     # ------------------------------------------------------------------
     # Composite Decision Score
     # ------------------------------------------------------------------
+
     decision_score_a = compute_weighted_score(metrics_a)
     decision_score_b = compute_weighted_score(metrics_b)
 
-    # Lower score is better
+    # ---------------------------------------------------------------
+    # Detailed Delta Breakdown
+    # ---------------------------------------------------------------
+
+    def better(lower_is_better: bool, a, b):
+        if a == b:
+            return "Tie"
+        if lower_is_better:
+            return supplier_a.name if a < b else supplier_b.name
+        else:
+            return supplier_a.name if a > b else supplier_b.name
+
+    delta_breakdown = {}
+
+    # Risk Score
+    risk_delta = metrics_a["risk_score"] - metrics_b["risk_score"]
+    delta_breakdown["risk_score"] = {
+        "supplier_a": metrics_a["risk_score"],
+        "supplier_b": metrics_b["risk_score"],
+        "difference": risk_delta,
+        "better_supplier": better(True, metrics_a["risk_score"], metrics_b["risk_score"]),
+        "weight": 0.40,
+        "weighted_impact": round(abs(risk_delta) * 0.40, 2),
+    }
+
+    # Sanctions Count
+    sanctions_delta = metrics_a["sanctions_count"] - metrics_b["sanctions_count"]
+    delta_breakdown["sanctions_count"] = {
+        "supplier_a": metrics_a["sanctions_count"],
+        "supplier_b": metrics_b["sanctions_count"],
+        "difference": sanctions_delta,
+        "better_supplier": better(True, metrics_a["sanctions_count"], metrics_b["sanctions_count"]),
+        "weight": 0.25,
+        "weighted_impact": round(abs(sanctions_delta) * 0.25, 2),
+    }
+
+    # Section 889
+    section_delta = metrics_a["section_rank"] - metrics_b["section_rank"]
+    delta_breakdown["section_889"] = {
+        "supplier_a_rank": metrics_a["section_rank"],
+        "supplier_b_rank": metrics_b["section_rank"],
+        "difference": section_delta,
+        "better_supplier": better(True, metrics_a["section_rank"], metrics_b["section_rank"]),
+        "weight": 0.20,
+        "weighted_impact": round(abs(section_delta) * 0.20, 2),
+    }
+
+    # Graph Exposure
+    graph_delta = metrics_a["graph_exposure"] - metrics_b["graph_exposure"]
+    delta_breakdown["graph_exposure"] = {
+        "supplier_a": metrics_a["graph_exposure"],
+        "supplier_b": metrics_b["graph_exposure"],
+        "difference": graph_delta,
+        "better_supplier": better(True, metrics_a["graph_exposure"], metrics_b["graph_exposure"]),
+        "weight": 0.10,
+        "weighted_impact": round(abs(graph_delta) * 0.10, 2),
+    }
+
+    # ---------------------------------------------------------------
+    # Final Winner Decision
+    # ---------------------------------------------------------------
+
     if decision_score_a < decision_score_b:
         winner = supplier_a.name
     elif decision_score_b < decision_score_a:
@@ -180,7 +242,6 @@ def compare_suppliers(
         winner = "Tie"
 
     delta = round(abs(decision_score_a - decision_score_b), 2)
-
     confidence = min(100, round(delta * 1.2, 2))
 
     return {
@@ -196,12 +257,11 @@ def compare_suppliers(
             "metrics": metrics_b,
             "decision_score": decision_score_b,
         },
+        "delta_breakdown": delta_breakdown,
         "comparison": {
             "winner": winner,
             "score_difference": delta,
             "confidence_percent": confidence,
-            "interpretation": (
-                "Lower decision score indicates lower compliance exposure."
-            ),
+            "interpretation": "Lower decision score indicates lower compliance exposure.",
         },
     }
