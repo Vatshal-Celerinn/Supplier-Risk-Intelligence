@@ -1,6 +1,5 @@
 import re
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
 
 from app.models import (
     GlobalEntity,
@@ -36,7 +35,9 @@ def resolve_or_create_entity(
 ):
     normalized_name = normalize(name)
 
-    # Check canonical match
+    # ---------------------------------------------
+    # 1️⃣ Canonical match
+    # ---------------------------------------------
     entity = (
         db.query(GlobalEntity)
         .filter(GlobalEntity.normalized_name == normalized_name)
@@ -44,9 +45,17 @@ def resolve_or_create_entity(
     )
 
     if entity:
+        # Ensure graph node exists (idempotent MERGE)
+        create_global_entity_node(
+            canonical_name=entity.canonical_name,
+            entity_type=entity.entity_type,
+            country=entity.country,
+        )
         return entity, 1.0
 
-    # Check alias match
+    # ---------------------------------------------
+    # 2️⃣ Alias match
+    # ---------------------------------------------
     alias = (
         db.query(GlobalEntityAlias)
         .filter(GlobalEntityAlias.normalized_alias == normalized_name)
@@ -54,9 +63,19 @@ def resolve_or_create_entity(
     )
 
     if alias:
-        return alias.entity, 0.9
+        entity = alias.entity
 
-    # Create new canonical entity
+        # Ensure graph node exists
+        create_global_entity_node(
+            canonical_name=entity.canonical_name,
+            entity_type=entity.entity_type,
+            country=entity.country,
+        )
+        return entity, 0.9
+
+    # ---------------------------------------------
+    # 3️⃣ Create new canonical entity
+    # ---------------------------------------------
     entity = GlobalEntity(
         canonical_name=name,
         normalized_name=normalized_name,
@@ -68,21 +87,29 @@ def resolve_or_create_entity(
     db.commit()
     db.refresh(entity)
 
-    # Sync to Neo4j
+    # Sync to Neo4j (MERGE = safe)
     create_global_entity_node(
-        canonical_name=name,
-        entity_type=entity_type,
-        country=country,
+        canonical_name=entity.canonical_name,
+        entity_type=entity.entity_type,
+        country=entity.country,
     )
 
     return entity, 1.0
 
 
 # =====================================================
-# RESOLVE SUPPLIER → ENTITY
+# RESOLVE SUPPLIER → ENTITY (STRICT 1:1 ENFORCED)
 # =====================================================
 
 def resolve_supplier_entity(supplier, db: Session):
+    """
+    Enforces:
+    - Each supplier resolves to exactly one canonical GlobalEntity
+    - SQL link always exists
+    - Graph RESOLVES_TO relationship always exists
+    - Idempotent (safe to call multiple times)
+    """
+
     entity, confidence = resolve_or_create_entity(
         name=supplier.name,
         db=db,
@@ -90,8 +117,24 @@ def resolve_supplier_entity(supplier, db: Session):
         country=supplier.country,
     )
 
-    # Prevent duplicate link
-    existing = (
+    # ---------------------------------------------
+    # Ensure exactly ONE link per supplier
+    # ---------------------------------------------
+    existing_links = (
+        db.query(SupplierEntityLink)
+        .filter(SupplierEntityLink.supplier_id == supplier.id)
+        .all()
+    )
+
+    # Remove incorrect links (hard enforcement of 1:1)
+    for link in existing_links:
+        if link.entity_id != entity.id:
+            db.delete(link)
+
+    db.commit()
+
+    # Check correct link exists
+    correct_link = (
         db.query(SupplierEntityLink)
         .filter(
             SupplierEntityLink.supplier_id == supplier.id,
@@ -100,18 +143,19 @@ def resolve_supplier_entity(supplier, db: Session):
         .first()
     )
 
-    if not existing:
-        link = SupplierEntityLink(
+    if not correct_link:
+        new_link = SupplierEntityLink(
             supplier_id=supplier.id,
             entity_id=entity.id,
             confidence_score=confidence,
             resolution_method="AUTO",
         )
-
-        db.add(link)
+        db.add(new_link)
         db.commit()
 
-    # Sync relationship to graph
+    # ---------------------------------------------
+    # Always sync graph relationship (MERGE safe)
+    # ---------------------------------------------
     link_supplier_to_entity(
         supplier_name=supplier.name,
         canonical_name=entity.canonical_name,
