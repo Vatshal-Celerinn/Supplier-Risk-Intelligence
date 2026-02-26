@@ -1,5 +1,4 @@
 from app.graph.graph_client import get_session
-
 def get_graph_data(entity_name: str, depth: int = 2):
     with get_session() as session:
         result = session.run(
