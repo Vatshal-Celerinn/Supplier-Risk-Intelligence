@@ -181,18 +181,32 @@ class CoveredEntity(Base):
 
 
 # =====================================================
-# ASSESSMENT HISTORY
+# ASSESSMENT HISTORY (FULL SNAPSHOT)
 # =====================================================
 class AssessmentHistory(Base):
     __tablename__ = "assessment_history"
 
     id = Column(Integer, primary_key=True)
-    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=False)
 
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=False)
+    initiated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Core Results
     risk_score = Column(Integer)
     overall_status = Column(String)
 
+    # Component Scores (for delta comparison)
+    sanctions_flag = Column(Boolean, default=False)
+    section889_status = Column(String, nullable=True)
+    news_signal_score = Column(Integer, default=0)
+    graph_risk_score = Column(Integer, default=0)
+
+    # Versioning
     scoring_version = Column(String, default="v1")
+
+    # Full Raw Snapshot (future-proofing)
+    snapshot = Column(JSON, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     supplier = relationship("Supplier", back_populates="assessments")

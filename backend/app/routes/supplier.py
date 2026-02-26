@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, WebSocket, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import asyncio
-from sqlalchemy import desc, func, text, case, or_
+from sqlalchemy import desc, func, case, or_
 from sqlalchemy.exc import IntegrityError
 from app.services.supplier_comparison_service import compare_suppliers
 from app.database import get_db, SessionLocal
@@ -121,16 +121,12 @@ def create_supplier(
         )
 
     db_supplier = Supplier(
-        name=row["name"],
-        normalized_name=normalize(row["name"]),
-        country=row["country"],
-        industry=row["industry"],
-        annual_revenue=row["annual_revenue_usd"],
-        ownership_type=row["ownership_type"],
-        parent_company=row["parent_company"],
-        tier_level=row["tier_level"],
-        is_global=True,         
-        organization_id=None
+        name=supplier.name,
+        normalized_name=normalized,
+        country=supplier.country,
+        industry=supplier.industry,
+        organization_id=current_user.organization_id,
+        is_global=False
     )
 
     try:
@@ -435,6 +431,12 @@ def get_supplier_profile(
                 "id": h.id,
                 "risk_score": h.risk_score,
                 "overall_status": h.overall_status,
+                "sanctions_flag": h.sanctions_flag,
+                "section889_status": h.section889_status,
+                "news_signal_score": h.news_signal_score,
+                "graph_risk_score": h.graph_risk_score,
+                "scoring_version": h.scoring_version,
+                "initiated_by_user_id": h.initiated_by_user_id,
                 "created_at": h.created_at,
             }
             for h in history
@@ -467,7 +469,11 @@ def supplier_assessment(
     if not supplier:
         raise HTTPException(status_code=404, detail="Supplier not found")
 
-    result = run_assessment(supplier_id, db)
+    result = run_assessment(
+        supplier_id=supplier_id, 
+        db=db,
+        user_id=current_user.id
+    )
 
     log_action(
         db=db,
@@ -504,9 +510,76 @@ def supplier_history(
         .all()
     )
 
-    return history
+    return [
+    {
+        "id": h.id,
+        "risk_score": h.risk_score,
+        "overall_status": h.overall_status,
+        "sanctions_flag": h.sanctions_flag,
+        "section889_status": h.section889_status,
+        "news_signal_score": h.news_signal_score,
+        "graph_risk_score": h.graph_risk_score,
+        "scoring_version": h.scoring_version,
+        "initiated_by_user_id": h.initiated_by_user_id,
+        "created_at": h.created_at,
+    }
+    for h in history
+]
 
+# =====================================================
+# ASSESSMENT DELTA COMPARISON
+# =====================================================
+@router.post("/{supplier_id:int}/compare-assessments")
+def compare_assessments(
+    supplier_id: int,
+    assessment_a_id: int,
+    assessment_b_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
 
+    supplier = (
+        db.query(Supplier)
+        .filter(
+            Supplier.id == supplier_id,
+            or_(
+                Supplier.organization_id == current_user.organization_id,
+                Supplier.is_global == True
+            ),
+        )
+        .first()
+    )
+
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+
+    a = db.query(AssessmentHistory).filter_by(
+        id=assessment_a_id,
+        supplier_id=supplier_id
+    ).first()
+
+    b = db.query(AssessmentHistory).filter_by(
+        id=assessment_b_id,
+        supplier_id=supplier_id
+    ).first()
+
+    if not a or not b:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    return {
+        "risk_score_delta": b.risk_score - a.risk_score,
+        "sanctions_flag_delta": int(b.sanctions_flag) - int(a.sanctions_flag),
+        "news_signal_delta": b.news_signal_score - a.news_signal_score,
+        "graph_risk_delta": b.graph_risk_score - a.graph_risk_score,
+        "section889_change": {
+            "from": a.section889_status,
+            "to": b.section889_status
+        },
+        "version_change": {
+            "from": a.scoring_version,
+            "to": b.scoring_version
+        }
+    }
 # =====================================================
 # LIVE STREAM
 # =====================================================
@@ -516,7 +589,11 @@ async def stream_supplier(websocket: WebSocket, supplier_id: int):
 
     while True:
         db = SessionLocal()
-        result = run_assessment(supplier_id, db)
+        result = run_assessment(
+            supplier_id=supplier_id, 
+            db=db,
+            user_id=None 
+        )
         db.close()
 
         await websocket.send_json(result)

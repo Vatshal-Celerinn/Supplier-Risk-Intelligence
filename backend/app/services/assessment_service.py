@@ -41,7 +41,7 @@ def calculate_overall_status(risk_score: int):
         return "PASS"
 
 
-def run_assessment(supplier_id: int, db: Session):
+def run_assessment(supplier_id: int, db: Session, user_id: int | None = None):
 
     # ------------------------------------------------------------------
     # Fetch Supplier
@@ -109,22 +109,33 @@ def run_assessment(supplier_id: int, db: Session):
 
     executive_brief = generate_executive_brief(overall_status)
 
-    # ------------------------------------------------------------------
-    # Persist Assessment History
-    # ------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Persist Assessment History (FULL SNAPSHOT)
+# ------------------------------------------------------------------
     history = AssessmentHistory(
         supplier_id=supplier_id,
+        initiated_by_user_id=user_id,
         risk_score=risk_score,
         overall_status=overall_status,
+        sanctions_flag=(
+            sanctions_result.get("overall_status") == "FAIL"
+            if sanctions_result else False
+        ),
+        section889_status=section_status,
+        news_signal_score=news_score or 0,
+        graph_risk_score=graph_risk or 0,
         scoring_version=config.version,
+        snapshot={
+            "sanctions": sanctions_result,
+            "section_889": section889_result,
+            "news_signal_score": news_score,
+            "graph_risk_score": graph_risk,
+            "reasons": reasons,
+            "config_version": config.version,
+        }
     )
 
     db.add(history)
-
-    # Optional: update supplier current risk snapshot
-    supplier.risk_score = risk_score
-    supplier.overall_status = overall_status
-
     db.commit()
 
     # ------------------------------------------------------------------
