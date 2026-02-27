@@ -115,7 +115,7 @@ def mark_entity_as_sanctioned(entity_name: str, source: str):
             MERGE (e:GlobalEntity {canonical_name: $name})
             SET e.sanctioned = true,
                 e.sanction_source = $source,
-                e.risk_score = 100,
+                e.enterprise_risk_score = 100,
                 e.updated_at = timestamp()
             """,
             name=entity_name,
@@ -198,3 +198,166 @@ def calculate_enterprise_trust_score(entity_name: str):
             "score": normalized_score,
             "breakdown": breakdown,
         }
+
+
+# =====================================================
+# GRAPH CONFIG
+# =====================================================
+
+MAX_DEPTH = 2
+MAX_NODES = 200
+MAX_EDGES = 400
+
+
+def classify_risk(score: float, sanctioned: bool):
+    if sanctioned:
+        return "RED"
+    if score is None:
+        return "GREEN"
+    if score <= 30:
+        return "GREEN"
+    elif score <= 60:
+        return "YELLOW"
+    return "RED"
+
+
+# =====================================================
+# MULTI-TIER SUPPLY CHAIN GRAPH
+# =====================================================
+
+def build_supply_chain_graph(supplier_name: str, depth: int = MAX_DEPTH):
+
+    nodes = {}
+    links = {}
+    sanction_paths = []
+
+    with get_session() as session:
+
+        # -------------------------------------------------
+        # Tier 0 + Tier 1 (Always include)
+        # -------------------------------------------------
+        resolve_query = """
+        MATCH (s:Supplier {name: $name})-[:RESOLVES_TO]->(g:GlobalEntity)
+        RETURN s, g
+        """
+
+        resolve_result = session.run(resolve_query, name=supplier_name)
+
+        nodes[supplier_name] = {
+            "id": supplier_name,
+            "type": "Supplier",
+            "tier": 0,
+            "risk_score": 0,
+            "risk_level": "GREEN",
+            "sanctioned": False,
+        }
+
+        for record in resolve_result:
+            entity_node = record["g"]
+
+            entity_name = entity_node.get("canonical_name")
+            risk_score = entity_node.get("enterprise_risk_score", 0)
+            sanctioned = entity_node.get("sanctioned", False)
+
+            nodes[entity_name] = {
+                "id": entity_name,
+                "type": "GlobalEntity",
+                "tier": 1,
+                "risk_score": risk_score,
+                "risk_level": classify_risk(risk_score, sanctioned),
+                "sanctioned": sanctioned,
+            }
+
+            links[(supplier_name, entity_name)] = {
+                "source": supplier_name,
+                "target": entity_name,
+                "type": "RESOLVES_TO",
+            }
+
+        # -------------------------------------------------
+        # Tier 2+ Traversal
+        # -------------------------------------------------
+        query = f"""
+        MATCH path =
+            (s:Supplier {{name: $name}})
+            -[:RESOLVES_TO]->(g:GlobalEntity)
+            -[:RELATION*1..{depth}]->(connected:GlobalEntity)
+        RETURN path
+        """
+
+        result = session.run(query, name=supplier_name)
+
+        for record in result:
+            path = record["path"]
+            if not path:
+                continue
+
+            relationships = path.relationships
+            nodes_in_path = path.nodes
+
+            for idx, node in enumerate(nodes_in_path):
+
+                if "GlobalEntity" not in node.labels:
+                    continue
+
+                name = node.get("canonical_name")
+                if not name:
+                    continue
+
+                tier = idx  # depth from supplier
+
+                risk_score = node.get("enterprise_risk_score", 0)
+                sanctioned = node.get("sanctioned", False)
+
+                nodes[name] = {
+                    "id": name,
+                    "type": "GlobalEntity",
+                    "tier": tier,
+                    "risk_score": risk_score,
+                    "risk_level": classify_risk(risk_score, sanctioned),
+                    "sanctioned": sanctioned,
+                }
+
+            for rel in relationships:
+                start = rel.start_node.get("canonical_name")
+                end = rel.end_node.get("canonical_name")
+
+                if start and end:
+                    links[(start, end)] = {
+                        "source": start,
+                        "target": end,
+                        "type": rel.get("type"),
+                    }
+
+        # -------------------------------------------------
+        # Sanction Path Detection
+        # -------------------------------------------------
+        sanction_query = f"""
+        MATCH path =
+            (s:Supplier {{name: $name}})
+            -[:RESOLVES_TO|RELATION*1..{depth}]->
+            (g:GlobalEntity {{sanctioned: true}})
+        RETURN path
+        """
+
+        sanction_result = session.run(sanction_query, name=supplier_name)
+
+        for record in sanction_result:
+            path = record["path"]
+            sanction_paths.append([
+                node.get("canonical_name")
+                for node in path.nodes
+                if node.get("canonical_name")
+            ])
+
+    # -------------------------------------------------
+    # Enforce Caps
+    # -------------------------------------------------
+    node_list = list(nodes.values())[:MAX_NODES]
+    link_list = list(links.values())[:MAX_EDGES]
+
+    return {
+        "nodes": node_list,
+        "links": link_list,
+        "sanction_paths": sanction_paths
+    }
