@@ -151,4 +151,10 @@ def run_assessment(supplier_id: int, db: Session, user_id: int | None = None):
         "graph_risk_score": graph_risk,
         "explanations": reasons,
         "executive_brief": executive_brief,
+        "breakdown": {
+            "sanctions": config.sanctions_weight if sanctions_result and sanctions_result.get("overall_status") == "FAIL" else 0,
+            "section_889": config.section889_fail_weight if section_status == "FAIL" else (config.section889_conditional_weight if section_status == "CONDITIONAL" else 0),
+            "news": news_score or 0,
+            "graph": graph_risk or 0,
+        }
     }
