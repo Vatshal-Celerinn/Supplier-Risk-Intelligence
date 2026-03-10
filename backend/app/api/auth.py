@@ -92,8 +92,9 @@ def login(
         value=access_token,
         httponly=True,
         samesite="lax",
-        secure=False,  # True in production (HTTPS)
+        secure=False,
         max_age=60 * 60,  # 1 hour
+        path="/",
     )
 
     # Refresh Token Cookie
@@ -104,6 +105,7 @@ def login(
         samesite="lax",
         secure=False,
         max_age=60 * 60 * 24 * 7,  # 7 days
+        path="/",
     )
 
     return {"message": "Logged in successfully"}
@@ -135,6 +137,7 @@ def get_me(
     ).first()
 
     if not user:
+        print(f"Auth Endpoint: User {username} not found in DB")
         raise HTTPException(
             status_code=401,
             detail="User not found"
@@ -181,6 +184,7 @@ def refresh(
         samesite="lax",
         secure=False,
         max_age=60 * 60,
+        path="/",
     )
 
     return {"message": "Token refreshed"}
