@@ -33,7 +33,7 @@ export default function SuppliersPage() {
       if (search.trim() || selectedCountry || selectedIndustry) {
         res = await api.get("/suppliers/search", {
           params: {
-            query: search.trim() || undefined,
+            ...(search.trim().length >= 2 ? { query: search.trim() } : {}),
             country: selectedCountry || undefined,
             industry: selectedIndustry || undefined
           }
