@@ -39,7 +39,6 @@ export function AuthProvider({
   const [toast, setToast] = useState<string | null>(null);
 
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const hasTriedRefresh = useRef(false);
 
   // ===============================
   // Fetch Logged In User
@@ -72,20 +71,13 @@ export function AuthProvider({
   // ===============================
   useEffect(() => {
     const init = async () => {
-      const success = await fetchUser();
-
-      // If access token expired, try refresh ONCE
-      if (!success && !hasTriedRefresh.current) {
-        hasTriedRefresh.current = true;
-        try {
-          await api.post("/auth/refresh");
-          await fetchUser();
-        } catch {
-          setUser(null);
-        }
+      try {
+        await fetchUser();
+      } catch (error) {
+        console.error("Initial auth check failed:", error);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     init();
