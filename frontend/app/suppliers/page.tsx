@@ -25,7 +25,17 @@ export default function SuppliersPage() {
   useEffect(() => {
     api
       .get("/suppliers/with-status")
-      .then(res => setSuppliers(res.data));
+      .then(res => {
+        if (Array.isArray(res.data)) {
+          setSuppliers(res.data);
+        } else {
+          setSuppliers([]);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch suppliers:", err);
+        setSuppliers([]);
+      });
   }, []);
 
   const toggleSelect = (id: number) => {
@@ -118,18 +128,16 @@ export default function SuppliersPage() {
             return (
               <div
                 key={supplier.id}
-                className={`grid grid-cols-12 items-center px-8 py-6 border-b border-zinc-800 last:border-none transition-all duration-200 group ${
-                  isSelected ? "bg-[#111a2a]" : "hover:bg-[#101726]"
-                }`}
+                className={`grid grid-cols-12 items-center px-8 py-6 border-b border-zinc-800 last:border-none transition-all duration-200 group ${isSelected ? "bg-[#111a2a]" : "hover:bg-[#101726]"
+                  }`}
               >
                 <div className="col-span-4 flex items-center gap-4">
                   <div
                     onClick={() => toggleSelect(supplier.id)}
-                    className={`w-4 h-4 border rounded-sm cursor-pointer transition ${
-                      isSelected
+                    className={`w-4 h-4 border rounded-sm cursor-pointer transition ${isSelected
                         ? "bg-white border-white"
                         : "border-zinc-600 group-hover:border-zinc-400"
-                    }`}
+                      }`}
                   />
 
                   <div className="flex items-center gap-3">
@@ -139,13 +147,12 @@ export default function SuppliersPage() {
 
                     {supplier.latest_status && (
                       <span
-                        className={`text-[10px] tracking-widest px-2 py-0.5 border rounded ${
-                          supplier.latest_status === "PASS"
+                        className={`text-[10px] tracking-widest px-2 py-0.5 border rounded ${supplier.latest_status === "PASS"
                             ? "border-green-500 text-green-400"
                             : supplier.latest_status === "CONDITIONAL"
-                            ? "border-yellow-500 text-yellow-400"
-                            : "border-red-500 text-red-400"
-                        }`}
+                              ? "border-yellow-500 text-yellow-400"
+                              : "border-red-500 text-red-400"
+                          }`}
                       >
                         {supplier.latest_status}
                       </span>
