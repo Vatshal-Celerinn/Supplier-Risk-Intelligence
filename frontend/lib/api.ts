@@ -98,6 +98,9 @@ export const supplierAPI = {
 
   resolveIdentity: (name: string) =>
     api.post("/suppliers/resolve", { name }),
+
+  search: (params: { query: string; country?: string; industry?: string }) =>
+    api.get("/suppliers/search", { params }),
 };
 
 export const intelligenceAPI = {
