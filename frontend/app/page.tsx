@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
-import api from "@/lib/api";
 
 /* ─────────── Animated Counter ─────────── */
 function AnimatedNumber({ value, suffix = "" }: { value: number; suffix?: string }) {
@@ -88,14 +87,6 @@ export default function Home() {
   const router = useRouter();
   const [underlineWidth, setUnderlineWidth] = useState(0);
 
-  // Search State
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCountry, setSelectedCountry] = useState("");
-  const [selectedIndustry, setSelectedIndustry] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-
   useEffect(() => {
     setTimeout(() => setUnderlineWidth(280), 300);
   }, []);
@@ -105,8 +96,6 @@ export default function Home() {
       {/* ─── Background Effects ─── */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-blue-500/[0.04] blur-[160px] rounded-full pointer-events-none" />
       <div className="absolute bottom-0 right-0 w-[600px] h-[400px] bg-red-500/[0.03] blur-[140px] rounded-full pointer-events-none" />
-
-
 
       <div className="relative max-w-7xl mx-auto px-10 py-24">
         {/* ═══════════════════════════════════════════ */}
@@ -141,149 +130,37 @@ export default function Home() {
             scoring and continuous monitoring.
           </p>
 
-          {/* ─── Search Bar ─── */}
-          <div className="relative z-10 max-w-3xl">
-            <div className="flex bg-white/[0.04] border border-white/[0.12] rounded-xl overflow-hidden focus-within:border-white/30 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
-              <div className="flex-1 flex items-center px-4">
-                <svg
-                  className="w-5 h-5 text-gray-500 mr-3 shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
+          {/* ─── CTA Buttons ─── */}
+          <div className="flex items-center gap-4 mb-12">
+            <button
+              onClick={() => router.push("/suppliers")}
+              className="relative px-8 py-3.5 bg-gradient-to-r from-indigo-600/80 to-blue-600/70 hover:from-indigo-500/90 hover:to-blue-500/80 border border-indigo-400/20 text-white text-sm font-semibold rounded-xl transition-all duration-300 hover:-translate-y-0.5 shadow-[0_0_20px_rgba(99,102,241,0.15)]"
+            >
+              <span className="relative z-10 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  placeholder="Search suppliers by name, country, or industry…"
-                  className="w-full bg-transparent border-none text-white placeholder-gray-600 focus:outline-none py-4 text-base"
-                  onChange={async (e) => {
-                    const val = e.target.value;
-                    setSearchQuery(val);
-                    if (val.length > 2) {
-                      setIsSearching(true);
-                      try {
-                        const res = await api.get("/suppliers/search", {
-                          params: {
-                            ...(val.trim().length >= 2 ? { query: val.trim() } : {}),
-                            country: selectedCountry || undefined,
-                            industry: selectedIndustry || undefined,
-                          },
-                        });
-                        setSearchResults(res.data.map((r: any) => r[0] || r));
-                      } catch {
-                        /* noop */
-                      } finally {
-                        setIsSearching(false);
-                      }
-                    } else {
-                      setSearchResults([]);
-                    }
-                  }}
-                />
+                View Suppliers
+              </span>
+            </button>
 
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`px-3 py-1.5 mr-2 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
-                    showFilters
-                      ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                      : "bg-white/5 text-gray-500 border border-white/10 hover:bg-white/10 hover:text-gray-300"
-                  }`}
-                >
-                  {showFilters ? "Hide Filters" : "Filters"}
-                </button>
-              </div>
-              <button
-                onClick={() => router.push("/suppliers/new")}
-                className="px-6 py-4 border-l border-white/[0.12] hover:bg-white/[0.06] text-sm font-medium text-gray-300 transition whitespace-nowrap"
-              >
-                + Register New
-              </button>
-            </div>
+            <button
+              onClick={() => router.push("/comparison")}
+              className="px-8 py-3.5 border border-zinc-700 hover:border-zinc-500 text-gray-300 hover:text-white text-sm font-medium rounded-xl transition-all duration-300 hover:-translate-y-0.5"
+            >
+              Compare Suppliers
+            </button>
 
-            {/* Expanded Filters */}
-            {showFilters && (
-              <div className="mt-3 p-5 bg-white/[0.03] border border-white/10 rounded-xl grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-medium text-gray-500 uppercase tracking-widest mb-2">
-                    Country / Region
-                  </label>
-                  <select
-                    value={selectedCountry}
-                    onChange={(e) => setSelectedCountry(e.target.value)}
-                    className="w-full bg-[#0b111b] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                  >
-                    <option value="">All Locations</option>
-                    <option value="United States">United States</option>
-                    <option value="China">China</option>
-                    <option value="Germany">Germany</option>
-                    <option value="India">India</option>
-                    <option value="Japan">Japan</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-gray-500 uppercase tracking-widest mb-2">
-                    Industry / NAICS
-                  </label>
-                  <select
-                    value={selectedIndustry}
-                    onChange={(e) => setSelectedIndustry(e.target.value)}
-                    className="w-full bg-[#0b111b] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                  >
-                    <option value="">All Industries</option>
-                    <option value="331110">Iron and Steel Mills (331110)</option>
-                    <option value="Manufacturing">General Manufacturing</option>
-                    <option value="Technology">Technology & Software</option>
-                    <option value="Logistics">Logistics & Supply Chain</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* Search Results Dropdown */}
-            {searchResults.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-[#0b111b] border border-white/15 rounded-xl shadow-2xl overflow-hidden z-50">
-                <div className="px-4 py-3 border-b border-zinc-800 text-[10px] font-medium text-gray-500 uppercase tracking-widest flex justify-between">
-                  <span>Match Candidates</span>
-                  <span>{searchResults.length} Results</span>
-                </div>
-                <ul className="max-h-[300px] overflow-y-auto">
-                  {searchResults.map((result, idx) => (
-                    <li
-                      key={idx}
-                      className="px-5 py-4 border-b border-zinc-800/50 hover:bg-white/[0.04] cursor-pointer flex items-center justify-between group transition-colors"
-                      onClick={() => {
-                        setSearchResults([]);
-                        router.push(`/assessment/${result.id}`);
-                      }}
-                    >
-                      <div>
-                        <div className="font-semibold text-white group-hover:text-blue-400 transition-colors">
-                          {result.name}
-                        </div>
-                        <div className="flex gap-4 mt-1 text-xs text-gray-500">
-                          <span>📍 {result.country}</span>
-                          <span>🏢 {result.industry}</span>
-                        </div>
-                      </div>
-                      <span className="text-[10px] uppercase font-bold tracking-widest bg-white/10 px-2 py-0.5 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                        Assess →
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <button
+              onClick={() => router.push("/admin")}
+              className="px-8 py-3.5 border border-zinc-800 hover:border-zinc-600 text-gray-500 hover:text-gray-300 text-sm font-medium rounded-xl transition-all duration-300"
+            >
+              Admin Config
+            </button>
           </div>
 
           {/* ─── Animated Stats ─── */}
-          <div className="flex gap-12 pt-10">
+          <div className="flex gap-12">
             {[
               { value: 4, suffix: "", label: "Risk Modules", sub: "Sanctions · 889 · News · Graph" },
               { value: 100, suffix: "+", label: "Suppliers Tracked", sub: "Global coverage" },
