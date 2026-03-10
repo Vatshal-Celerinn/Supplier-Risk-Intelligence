@@ -17,26 +17,43 @@ export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [search, setSearch] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState("");
+  const [selectedIndustry, setSelectedIndustry] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [sortKey, setSortKey] = useState<"name" | "country" | "industry">("name");
   const [sortAsc, setSortAsc] = useState(true);
 
   const router = useRouter();
 
+  const fetchSuppliers = async () => {
+    setIsSearching(true);
+    try {
+      let res;
+      if (search.trim() || selectedCountry || selectedIndustry) {
+        res = await api.get("/suppliers/search", {
+          params: {
+            query: search.trim() || undefined,
+            country: selectedCountry || undefined,
+            industry: selectedIndustry || undefined
+          }
+        });
+        setSuppliers(res.data.map((r: any) => r[0] || r));
+      } else {
+        res = await api.get("/suppliers/with-status");
+        setSuppliers(Array.isArray(res.data) ? res.data : []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch suppliers:", err);
+      setSuppliers([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   useEffect(() => {
-    api
-      .get("/suppliers/with-status")
-      .then(res => {
-        if (Array.isArray(res.data)) {
-          setSuppliers(res.data);
-        } else {
-          setSuppliers([]);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to fetch suppliers:", err);
-        setSuppliers([]);
-      });
-  }, []);
+    fetchSuppliers();
+  }, [search, selectedCountry, selectedIndustry]);
 
   const toggleSelect = (id: number) => {
     setSelected(prev =>
@@ -56,10 +73,7 @@ export default function SuppliersPage() {
   };
 
   const filtered = useMemo(() => {
-    return suppliers
-      .filter(s =>
-        s.name.toLowerCase().includes(search.toLowerCase())
-      )
+    return [...suppliers]
       .sort((a, b) => {
         const valA = a[sortKey]?.toLowerCase() || "";
         const valB = b[sortKey]?.toLowerCase() || "";
@@ -96,13 +110,57 @@ export default function SuppliersPage() {
           </button>
         </div>
 
-        <div className="border border-zinc-800 bg-[#0c121c] rounded-lg px-6 py-4">
-          <input
-            placeholder="Search suppliers..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="bg-transparent outline-none text-sm w-full text-gray-300 placeholder-gray-600"
-          />
+        <div className="space-y-4">
+          <div className="flex bg-[#111a2a] border border-zinc-700 rounded-xl overflow-hidden focus-within:border-white/50 transition-all">
+            <div className="flex-1 flex items-center px-4">
+              <svg className="w-4 h-4 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              <input
+                placeholder="Search by name, NAICS, or location..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="bg-transparent outline-none py-3 text-sm w-full text-gray-300 placeholder-gray-600"
+              />
+              <button 
+                onClick={() => setShowFilters(!showFilters)}
+                className={`px-3 py-1 mr-2 rounded-md text-[10px] uppercase font-bold tracking-widest transition-colors ${showFilters ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-white/5 text-gray-500 border border-white/10 hover:bg-white/10'}`}
+              >
+                {showFilters ? 'Hide Filters' : 'Filters'}
+              </button>
+            </div>
+            {isSearching && (
+              <div className="flex items-center pr-4">
+                <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+
+          {showFilters && (
+            <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-1 duration-200">
+              <select 
+                value={selectedCountry}
+                onChange={(e) => setSelectedCountry(e.target.value)}
+                className="bg-[#111a2a] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-gray-400 focus:outline-none focus:border-white/30"
+              >
+                <option value="">All Locations</option>
+                <option value="United States">United States</option>
+                <option value="China">China</option>
+                <option value="Germany">Germany</option>
+                <option value="India">India</option>
+                <option value="Japan">Japan</option>
+              </select>
+              <select 
+                value={selectedIndustry}
+                onChange={(e) => setSelectedIndustry(e.target.value)}
+                className="bg-[#111a2a] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-gray-400 focus:outline-none focus:border-white/30"
+              >
+                <option value="">All Industries</option>
+                <option value="331110">Iron and Steel Mills (331110)</option>
+                <option value="Manufacturing">Manufacturing</option>
+                <option value="Technology">Technology</option>
+                <option value="Logistics">Logistics</option>
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="border border-zinc-800 rounded-lg overflow-hidden bg-[#0b111b]">
