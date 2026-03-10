@@ -204,9 +204,9 @@ def calculate_enterprise_trust_score(entity_name: str):
 # GRAPH CONFIG
 # =====================================================
 
-MAX_DEPTH = 2
-MAX_NODES = 200
-MAX_EDGES = 400
+MAX_DEPTH = 4
+MAX_NODES = 500
+MAX_EDGES = 1000
 
 
 def classify_risk(score: float, sanctioned: bool):
