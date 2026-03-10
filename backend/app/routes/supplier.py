@@ -29,7 +29,7 @@ router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 # =====================================================
 @router.get("/search", response_model=List[SupplierResponse])
 def search_suppliers(
-    query: Optional[str] = Query(None, min_length=2),
+    query: Optional[str] = Query(None),
     country: Optional[str] = None,
     industry: Optional[str] = None,
     limit: int = 20,
