@@ -121,19 +121,19 @@ function AnimatedNumber({ value, suffix = "" }: { value: number; suffix?: string
    RISK MODULE PILL (animated on hover)
    ═══════════════════════════════════════════════════════════ */
 function RiskPill({
-  icon,
   label,
   color,
+  dotColor,
 }: {
-  icon: string;
   label: string;
   color: string;
+  dotColor: string;
 }) {
   return (
     <div
       className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full border transition-all duration-300 hover:scale-105 cursor-default ${color}`}
     >
-      <span className="text-sm">{icon}</span>
+      <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
       <span className="text-xs font-medium tracking-wide">{label}</span>
     </div>
   );
@@ -237,68 +237,104 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════ */}
-        {/*          RISK MODULES SHOWCASE             */}
-        {/* ═══════════════════════════════════════════ */}
-        <section className="mb-20">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-px w-6 bg-gray-700" />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-gray-600 font-medium">
-              Risk Modules
+        <section className="mb-24">
+          <div className="flex items-center gap-3 mb-10">
+            <div className="h-px w-8 bg-indigo-500/30" />
+            <span className="text-[11px] uppercase tracking-[0.3em] text-indigo-400 font-semibold italic">
+              Core Intelligence Modules
             </span>
           </div>
 
-          <div className="flex flex-wrap gap-3 mb-12">
-            <RiskPill
-              icon="🛡️"
-              label="OFAC / SDN Sanctions"
-              color="bg-red-500/[0.06] border-red-500/20 text-red-300"
-            />
-            <RiskPill
-              icon="📋"
-              label="Section 889 Compliance"
-              color="bg-amber-500/[0.06] border-amber-500/20 text-amber-300"
-            />
-            <RiskPill
-              icon="📰"
-              label="Adverse Media Signals"
-              color="bg-purple-500/[0.06] border-purple-500/20 text-purple-300"
-            />
-            <RiskPill
-              icon="🔗"
-              label="Entity Network Graph"
-              color="bg-cyan-500/[0.06] border-cyan-500/20 text-cyan-300"
-            />
-            <RiskPill
-              icon="⚖️"
-              label="Weighted Scoring Engine"
-              color="bg-indigo-500/[0.06] border-indigo-500/20 text-indigo-300"
-            />
-            <RiskPill
-              icon="📊"
-              label="PDF Risk Dossier"
-              color="bg-emerald-500/[0.06] border-emerald-500/20 text-emerald-300"
-            />
+          <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-4 mb-10">
+            {[
+              { label: "Sanctions Screening" },
+              { label: "Section 889 Compliance" },
+              { label: "Adverse Media Signals" },
+              { label: "Entity Network Analysis" },
+              { label: "Weighted Risk Scoring" },
+              { label: "Compliance Dossier PDF" },
+            ].map((module) => (
+              <div
+                key={module.label}
+                className="group relative flex-shrink-0 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white/[0.03] backdrop-blur-md border border-white/[0.08] hover:border-white/[0.15] transition-all duration-500 cursor-default"
+              >
+                {/* Accent Glow */}
+                <div className="absolute inset-y-2 left-0 w-[2px] bg-gradient-to-b from-transparent via-indigo-500/40 to-transparent group-hover:via-indigo-400 opacity-50 group-hover:opacity-100 transition-all" />
+                
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500/60 group-hover:bg-indigo-400 animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                <span className="text-[12px] font-medium tracking-tight text-gray-300 group-hover:text-white transition-colors whitespace-nowrap">
+                  {module.label}
+                </span>
+              </div>
+            ))}
           </div>
 
           {/* Stats Row */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {[
-              { value: 4, suffix: "", label: "Risk Modules", sub: "Sanctions · 889 · News · Graph", icon: "🔬" },
-              { value: 100, suffix: "+", label: "Suppliers Tracked", sub: "Global entity coverage", icon: "🏢" },
-              { value: 4, suffix: "-Tier", label: "Graph Depth", sub: "Neo4j entity traversal", icon: "🕸️" },
-              { value: 24, suffix: "/7", label: "Monitoring", sub: "Continuous compliance", icon: "📡" },
+              { 
+                value: 4, 
+                suffix: "", 
+                label: "Risk Modules", 
+                sub: "Sanctions · 889 · News · Graph",
+                icon: (
+                  <svg className="w-5 h-5 text-indigo-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.691.387a2 2 0 01-1.78.032l-3.343-1.487a2 2 0 00-2.15.302l-1.615 1.323a2 2 0 01-2.433.15L3 17m0 0l-1.293-1.293a1 1 0 011.414-1.414L3 17z" />
+                  </svg>
+                )
+              },
+              { 
+                value: 100, 
+                suffix: "+", 
+                label: "Suppliers Tracked", 
+                sub: "Global entity coverage",
+                icon: (
+                  <svg className="w-5 h-5 text-blue-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                )
+              },
+              { 
+                value: 3, 
+                suffix: "-Tier", 
+                label: "Graph Depth", 
+                sub: "Neo4j entity traversal",
+                icon: (
+                  <svg className="w-5 h-5 text-cyan-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                )
+              },
+              { 
+                value: 24, 
+                suffix: "/7", 
+                label: "Monitoring", 
+                sub: "Continuous compliance",
+                icon: (
+                  <svg className="w-5 h-5 text-emerald-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )
+              },
             ].map((stat, i) => (
               <div
                 key={i}
-                className="group p-5 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.1] hover:bg-white/[0.04] transition-all duration-300"
+                className="group relative p-6 rounded-2xl bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.1] transition-all duration-500 hover:bg-white/[0.03]"
               >
-                <div className="text-xl mb-3">{stat.icon}</div>
-                <p className="text-2xl font-bold text-white font-mono tracking-tight">
+                {/* Subtle Hover Glow */}
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl" />
+                
+                <div className="mb-4 p-2.5 w-fit rounded-lg bg-white/[0.03] border border-white/[0.05]">
+                  {stat.icon}
+                </div>
+                
+                <p className="text-3xl font-bold text-white font-mono tracking-tighter mb-1">
                   <AnimatedNumber value={stat.value} suffix={stat.suffix} />
                 </p>
-                <p className="text-sm text-gray-300 mt-1">{stat.label}</p>
-                <p className="text-[10px] text-gray-600 mt-0.5">{stat.sub}</p>
+                <p className="text-sm font-semibold text-gray-400 group-hover:text-gray-200 transition-colors uppercase tracking-wider text-[10px]">
+                  {stat.label}
+                </p>
+                <p className="text-[11px] text-gray-600 mt-1 leading-tight">{stat.sub}</p>
               </div>
             ))}
           </div>
@@ -364,7 +400,7 @@ export default function Home() {
               },
               {
                 title: "Entity Network Graph",
-                desc: "Visualize ownership chains, subsidiaries, and partners with trust propagation across 4 tiers.",
+                desc: "Visualize ownership chains, subsidiaries, and partners with trust propagation across 3 tiers.",
                 icon: (
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -430,15 +466,15 @@ export default function Home() {
             </span>
           </div>
           <h2 className="text-2xl md:text-3xl font-semibold text-white/90 mb-10">
-            From registration to continuous risk monitoring.
+            From self-onboarding to continuous risk monitoring.
           </h2>
 
           <div className="grid grid-cols-4 gap-4">
             {[
               {
                 step: "01",
-                title: "Register",
-                desc: "Add supplier with name, country, industry. Auto-resolves to canonical entity.",
+                title: "Onboard",
+                desc: "Suppliers self-register via secure portal. System auto-resolves entity against global registries.",
                 color: "from-blue-500/10",
               },
               {
