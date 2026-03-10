@@ -4,7 +4,7 @@ import axios, {
 } from "axios";
 
 const api = axios.create({
-  baseURL: "http://127.0.0.1:8000",
+  baseURL: "http://localhost:8000",
   withCredentials: true,
 });
 
@@ -41,7 +41,8 @@ api.interceptors.response.use(
       requestUrl.includes("/auth/login") ||
       requestUrl.includes("/auth/register") ||
       requestUrl.includes("/auth/refresh") ||
-      requestUrl.includes("/auth/logout");
+      requestUrl.includes("/auth/logout") ||
+      requestUrl.includes("/auth/me"); // Exclude /auth/me from auto-redirects
 
     if (
       status === 401 &&
@@ -65,7 +66,15 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError);
-        return Promise.reject(refreshError); // ❌ NO REDIRECT HERE
+        
+        // If refresh fails, and we're not already on login/signup, redirect
+        if (typeof window !== "undefined") {
+          const path = window.location.pathname;
+          if (path !== "/login" && path !== "/signup") {
+            window.location.href = "/login";
+          }
+        }
+        return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
       }
