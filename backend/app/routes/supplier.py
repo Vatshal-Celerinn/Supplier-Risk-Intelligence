@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, WebSocket, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import asyncio
-from sqlalchemy import desc, func, case, or_
+from sqlalchemy import desc, func, case, or_, literal_column
 from sqlalchemy.exc import IntegrityError
 from app.services.supplier_comparison_service import compare_suppliers
 from app.database import get_db, SessionLocal
@@ -29,56 +29,73 @@ router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 # =====================================================
 @router.get("/search", response_model=List[SupplierResponse])
 def search_suppliers(
-    query: str = Query(..., min_length=2),
+    query: Optional[str] = Query(None, min_length=2),
     country: Optional[str] = None,
+    industry: Optional[str] = None,
     limit: int = 20,
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
 
-    normalized_query = normalize(query)
-
-    similarity_score = func.similarity(
-        Supplier.normalized_name,
-        normalized_query
-    )
+    if query:
+        normalized_query = normalize(query)
+        # Multi-field similarity scoring
+        name_sim = func.similarity(Supplier.normalized_name, normalized_query)
+        industry_sim = func.similarity(Supplier.industry, normalized_query)
+        country_sim = func.similarity(Supplier.country, normalized_query)
+        
+        search_score = (
+            (name_sim * 2.0) +
+            (industry_sim * 1.5) +
+            (country_sim * 1.0)
+        ).label("search_score")
+    else:
+        # Default score if no query is provided
+        search_score = literal_column("1.0").label("search_score")
 
     base_query = (
-        db.query(
-            Supplier,
-            similarity_score.label("score")
-        )
+        db.query(Supplier, search_score)
         .filter(
             or_(
                 Supplier.organization_id == current_user.organization_id,
-                Supplier.is_global == True  # 🔥 include seeded suppliers
+                Supplier.is_global == True
             )
         )
     )
 
+    # Explicit filters
     if country:
-        base_query = base_query.filter(Supplier.country == country)
+        base_query = base_query.filter(Supplier.country.ilike(f"%{country}%"))
+    
+    if industry:
+        base_query = base_query.filter(Supplier.industry.ilike(f"%{industry}%"))
 
-    base_query = base_query.filter(
-        similarity_score > 0.2
-    )
+    # Relevancy threshold only if query exists
+    if query:
+        base_query = base_query.filter(
+            or_(
+                func.similarity(Supplier.normalized_name, normalize(query)) > 0.15,
+                func.similarity(Supplier.industry, query) > 0.3,
+                func.similarity(Supplier.country, query) > 0.4
+            )
+        )
+
+    # Order by score + boosts
+    if query:
+        normalized_query = normalize(query)
+        order_expr = desc(
+            search_score
+            + case((Supplier.normalized_name == normalized_query, 2.0), else_=0.0)
+            + case((Supplier.industry == query, 3.0), else_=0.0)
+            + case((Supplier.country == query, 1.0), else_=0.0)
+        )
+    else:
+        order_expr = desc(Supplier.id) # Default ordering if no query
 
     results = (
         base_query
-        .order_by(
-            desc(
-                similarity_score
-                + case(
-                    (Supplier.normalized_name == normalized_query, 1.0),
-                    else_=0.0
-                )
-                + case(
-                    (Supplier.normalized_name.like(f"{normalized_query}%"), 0.5),
-                    else_=0.0
-                )
-            )
-        )
+        .order_by(order_expr)
         .limit(limit)
         .offset(offset)
         .all()
