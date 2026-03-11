@@ -138,14 +138,14 @@ export default function Navbar() {
             <>
               <Link
                 href="/login"
-                className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded-md transition"
+                className="px-5 py-2 text-sm bg-gradient-to-r from-indigo-600/80 to-blue-600/70 hover:from-indigo-500 hover:to-blue-500 border border-indigo-400/25 rounded-lg transition-all duration-300 shadow-[0_0_15px_rgba(99,102,241,0.2)] hover:shadow-[0_0_25px_rgba(99,102,241,0.3)] hover:-translate-y-0.5"
               >
                 Login
               </Link>
 
               <Link
                 href="/signup"
-                className="px-4 py-2 text-sm bg-white/10 hover:bg-white/20 rounded-md transition"
+                className="px-5 py-2 text-sm border border-zinc-700/70 hover:border-zinc-500 text-gray-300 hover:text-white rounded-lg transition-all duration-300 hover:bg-white/[0.03] hover:-translate-y-0.5"
               >
                 Sign Up
               </Link>
