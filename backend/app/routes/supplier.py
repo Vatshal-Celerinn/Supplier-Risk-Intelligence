@@ -464,9 +464,11 @@ def get_supplier_profile(
         "sanctioned_entities": sanction_hits,
         "graph_summary": graph_summary,
     }
-# =====================================================
-# SUPPLIER ASSESSMENT
-# =====================================================
+import json
+from fastapi.encoders import jsonable_encoder
+from app.worker.celery_app import redis_client
+from app.worker.tasks import run_assessment_task
+
 @router.get("/{supplier_id:int}/assessment")
 def supplier_assessment(
     supplier_id: int,
@@ -488,11 +490,32 @@ def supplier_assessment(
     if not supplier:
         raise HTTPException(status_code=404, detail="Supplier not found")
 
-    result = run_assessment(
-        supplier_id=supplier_id, 
-        db=db,
-        user_id=current_user.id
-    )
+    # [1] FAST CACHE SLA: Attempt to load from Redis cache in < 1 second.
+    cache_key = f"assessment:cached:{supplier_id}"
+    cached_data = redis_client.get(cache_key)
+    
+    if cached_data:
+        try:
+            return json.loads(cached_data)
+        except json.JSONDecodeError:
+            pass # Fallback to re-running if cache corrupt
+
+    # [2] FIRST TIME SLA: Delegate heavy compute to a Celery worker pool
+    # The worker pool guarantees 4 concurrent processes without blocking API.
+    # While we wait synchronously here to please the frontend, the work is distributed.
+    celery_task = run_assessment_task.delay(supplier_id, current_user.id)
+    
+    # Wait for the Celery task (SLA 2-3 mins bounded naturally)
+    result = celery_task.get(timeout=240) 
+
+    # Handle errors from the task natively
+    if isinstance(result, dict) and "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    # Ensure JSON seriazibility
+    result = jsonable_encoder(result)
+
+    # Note: redis_client.setex is already handled inside the Celery task after completion.
 
     log_action(
         db=db,
