@@ -53,7 +53,7 @@ export default function SignupPage() {
     try {
       setError("");
       await register(username, password);
-      router.push("/suppliers");
+      router.push("/");
     } catch {
       setError("Signup failed");
     }
