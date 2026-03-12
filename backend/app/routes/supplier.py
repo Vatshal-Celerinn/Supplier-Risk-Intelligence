@@ -696,3 +696,73 @@ def compare_two_suppliers(
         organization_id=current_user.organization_id,
     )
     return result
+
+
+# =====================================================
+# PUBLIC DATA AGGREGATION (FREE OSINT)
+# =====================================================
+from app.services.public_data_service import aggregate_public_data
+
+@router.get("/{supplier_id:int}/public-data")
+def get_supplier_public_data(
+    supplier_id: int,
+    news_months: int = Query(12, ge=1, le=36),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Aggregate publicly available data for a supplier:
+    - Sanctions lists (OFAC SDN, BIS Denied Parties, EU sanctions)
+    - Trade/import records (US Census)
+    - Corporate filings (SEC EDGAR)
+    - Recent news (GNews, configurable time window)
+
+    Results are cached in Redis for 6 hours.
+    """
+    supplier = (
+        db.query(Supplier)
+        .filter(
+            Supplier.id == supplier_id,
+            or_(
+                Supplier.organization_id == current_user.organization_id,
+                Supplier.is_global == True
+            ),
+        )
+        .first()
+    )
+
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+
+    # ── Redis cache (6-hour TTL) ──
+    cache_key = f"public_data:{supplier_id}"
+    cached = redis_client.get(cache_key)
+    if cached:
+        try:
+            return json.loads(cached)
+        except json.JSONDecodeError:
+            pass
+
+    # ── Fresh aggregation ──
+    result = aggregate_public_data(
+        name=supplier.name,
+        country=supplier.country or "",
+        news_months=news_months,
+    )
+
+    # Cache for 6 hours
+    try:
+        redis_client.setex(cache_key, 21600, json.dumps(result))
+    except Exception as e:
+        print(f"⚠️ Redis cache write failed: {e}")
+
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="VIEW_PUBLIC_DATA",
+        resource_type="Supplier",
+        resource_id=supplier_id,
+        details={"sanctions_flagged": result.get("sanctions", {}).get("flagged", False)},
+    )
+
+    return result
