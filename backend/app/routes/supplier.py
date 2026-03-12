@@ -13,6 +13,7 @@ from app.models import (
     SupplierEntityLink,
     GlobalEntity,
     SanctionedEntity,
+    AuditLog,
 )
 from app.schemas import SupplierCreate, SupplierResponse
 from app.services.assessment_service import run_assessment
@@ -469,6 +470,33 @@ from fastapi.encoders import jsonable_encoder
 from app.worker.celery_app import redis_client
 from app.worker.tasks import run_assessment_task
 
+
+def _get_supplier_audit_log(db: Session, supplier_id: int):
+    """Fetch audit trail entries for a supplier, formatted for the frontend."""
+    logs = (
+        db.query(AuditLog)
+        .outerjoin(User, AuditLog.user_id == User.id)
+        .filter(
+            AuditLog.resource_type == "Supplier",
+            AuditLog.resource_id == supplier_id,
+        )
+        .order_by(AuditLog.timestamp.desc())
+        .limit(50)
+        .all()
+    )
+
+    result = []
+    for log in logs:
+        actor = "System"
+        if log.user:
+            actor = log.user.username
+        result.append({
+            "actor": actor,
+            "action": log.action,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else "",
+        })
+    return result
+
 @router.get("/{supplier_id:int}/assessment")
 def supplier_assessment(
     supplier_id: int,
@@ -496,7 +524,21 @@ def supplier_assessment(
     
     if cached_data:
         try:
-            return json.loads(cached_data)
+            cached_result = json.loads(cached_data)
+
+            # Audit trail: log even when serving from cache
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                action="VIEW_CACHED_ASSESSMENT",
+                resource_type="Supplier",
+                resource_id=supplier_id,
+                details={"result": cached_result.get("overall_status"), "source": "cache"},
+            )
+
+            # Attach live audit trail to cached response
+            cached_result["audit_log"] = _get_supplier_audit_log(db, supplier_id)
+            return cached_result
         except json.JSONDecodeError:
             pass # Fallback to re-running if cache corrupt
 
@@ -525,6 +567,9 @@ def supplier_assessment(
         resource_id=supplier_id,
         details={"result": result.get("overall_status")},
     )
+
+    # Attach audit trail to fresh assessment response
+    result["audit_log"] = _get_supplier_audit_log(db, supplier_id)
 
     return result
 # =====================================================
